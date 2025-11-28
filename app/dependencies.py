@@ -10,6 +10,8 @@ from langchain_core.embeddings import Embeddings
 from app.core.ingestion import IngestionService
 from app.core.vectorization import VectorizationService
 from app.core.storage import StorageService
+from app.core.clustering import ClusteringService
+from app.core.pattern_detection import PatternDetectionService
 
 logger = logging.getLogger(__name__)
 
@@ -97,4 +99,17 @@ def get_ingestion_service() -> IngestionService:
     vectorization_service = get_vectorization_service()
     storage_service = get_storage_service()
     return IngestionService(vectorization_service, storage_service)
+
+
+def get_clustering_service() -> ClusteringService:
+    """Get clustering service."""
+    storage_service = get_storage_service()
+    return ClusteringService(storage_service)
+
+
+def get_pattern_detection_service() -> PatternDetectionService:
+    """Get pattern detection service."""
+    storage_service = get_storage_service()
+    clustering_service = get_clustering_service()
+    return PatternDetectionService(storage_service, clustering_service)
 
