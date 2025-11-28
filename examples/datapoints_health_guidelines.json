@@ -1,0 +1,57 @@
+[
+  {
+    "id": "guidelines_001",
+    "source_type": "rss",
+    "source_name": "AP News",
+    "source_url": "https://feeds.apnews.com/rss/topnews",
+    "title": "Government announces new health guidelines for public spaces",
+    "content": "The government has announced updated health guidelines for public spaces, including recommendations for ventilation and crowd management. The guidelines are based on the latest scientific evidence and aim to reduce transmission risks while allowing normal activities to continue.",
+    "url": "https://apnews.com/health-guidelines-2025",
+    "published_at": "2025-01-15T07:20:00Z",
+    "author": "AP Health Reporter",
+    "categories": ["health", "government", "public_health"],
+    "ingested_at": "2025-01-15T07:25:00Z"
+  },
+  {
+    "id": "guidelines_002",
+    "source_type": "rss",
+    "source_name": "Reuters Health",
+    "source_url": "https://www.reuters.com/rssFeed/healthNews",
+    "title": "Updated public health protocols released for indoor gatherings",
+    "content": "Health authorities have released updated protocols for indoor gatherings and public events. The new guidelines emphasize improved ventilation, capacity limits, and hygiene measures. These recommendations are based on recent research and aim to balance public health with economic and social needs.",
+    "url": "https://www.reuters.com/health/public-protocols",
+    "published_at": "2025-01-15T16:00:00Z",
+    "author": "Reuters Health Team",
+    "categories": ["health", "government", "public_health", "guidelines"],
+    "ingested_at": "2025-01-15T16:05:00Z"
+  },
+  {
+    "id": "guidelines_003",
+    "source_type": "tavily",
+    "source_name": "Tavily Search",
+    "source_url": "https://api.tavily.com",
+    "title": "CDC updates recommendations for workplace safety and health measures",
+    "content": "The Centers for Disease Control and Prevention has updated its recommendations for workplace safety, providing new guidance on ventilation, social distancing, and protective measures. Employers are encouraged to implement these measures to protect workers and reduce health risks in workplace settings.",
+    "url": "https://cdc.gov/workplace-safety-guidelines",
+    "published_at": "2025-01-15T10:00:00Z",
+    "author": null,
+    "categories": ["health", "government", "public_health", "workplace"],
+    "search_query": "CDC workplace safety guidelines",
+    "relevance_score": 0.87,
+    "ingested_at": "2025-01-15T10:05:00Z"
+  },
+  {
+    "id": "guidelines_004",
+    "source_type": "rss",
+    "source_name": "BBC News",
+    "source_url": "https://feeds.bbci.co.uk/news/rss.xml",
+    "title": "New health and safety standards announced for schools and universities",
+    "content": "Education officials have announced new health and safety standards for schools and universities. The standards include requirements for air quality, cleaning protocols, and student health monitoring. These measures are designed to maintain safe learning environments while ensuring educational continuity.",
+    "url": "https://www.bbc.com/news/education-health-standards",
+    "published_at": "2025-01-15T08:45:00Z",
+    "author": "BBC Education Reporter",
+    "categories": ["health", "government", "public_health", "education"],
+    "ingested_at": "2025-01-15T08:50:00Z"
+  }
+]
+

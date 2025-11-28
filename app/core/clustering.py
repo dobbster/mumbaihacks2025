@@ -25,9 +25,10 @@ class ClusteringService:
     def __init__(
         self,
         storage_service: StorageService,
-        eps: float = 0.3,
+        eps: float = 0.30,  # Optimized based on testing: balances topic diversity and cluster quality
         min_samples: int = 2,
-        metric: str = "cosine"
+        metric: str = "cosine",
+        similarity_threshold: float = 0.75
     ):
         """
         Initialize clustering service.
@@ -42,11 +43,13 @@ class ClusteringService:
                         Lower = more small clusters
                         Higher = only large clusters
             metric: Distance metric ('cosine' recommended for embeddings)
+            similarity_threshold: Minimum cosine similarity for find_similar_datapoints (0.0-1.0)
         """
         self.storage_service = storage_service
         self.eps = eps
         self.min_samples = min_samples
         self.metric = metric
+        self.similarity_threshold = similarity_threshold
     
     def cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """Calculate cosine similarity between two vectors."""
@@ -255,24 +258,33 @@ class ClusteringService:
     
     def cluster_recent_datapoints(
         self,
-        hours: int = 24,
+        hours: int = 168,  # Default to 7 days to catch more datapoints
         min_cluster_size: Optional[int] = None,
-        use_dbscan: bool = True
+        use_dbscan: bool = True,
+        force_recluster: bool = False
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Cluster all recent unclustered datapoints.
         
         Args:
-            hours: Look back this many hours
+            hours: Look back this many hours (default: 168 = 7 days)
             min_cluster_size: Override min_samples for DBSCAN
             use_dbscan: Use DBSCAN (True) or simple similarity (False)
+            force_recluster: If True, recluster even already-clustered datapoints
             
         Returns:
             Dictionary mapping cluster_id to list of datapoints
         """
-        # Get recent unclustered datapoints
+        # Get recent datapoints
         recent = self.storage_service.get_recent_datapoints(hours=hours)
-        unclustered = [dp for dp in recent if not dp.get("clustered", False)]
+        
+        # Filter unclustered unless force_recluster is True
+        if force_recluster:
+            unclustered = recent
+            logger.info(f"Force reclustering: processing {len(unclustered)} datapoints (including already clustered)")
+        else:
+            unclustered = [dp for dp in recent if not dp.get("clustered", False)]
+            logger.info(f"Found {len(unclustered)} unclustered datapoints out of {len(recent)} recent datapoints")
         
         if not unclustered:
             logger.info("No unclustered datapoints found")
