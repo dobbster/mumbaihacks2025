@@ -12,8 +12,9 @@ class VerifyRequest(BaseModel):
 @router.post("/verify")
 def verify(request: VerifyRequest):
     # Run the LangGraph flow with the user's prompt
-    state = {"messages": [request.prompt], "queries": [], "results": []}
+    state = {"messages": [request.prompt], "queries": [], "results": [], "ingested_results": []}
     result = graph.invoke(state)
-    # Limit the number of results returned
-    results = result["results"][:request.max_results]
+    # Limit the number of ingested results returned
+    # print("Verify results:", result)
+    results = result.get("results", [])[:request.max_results]
     return {"queries": result["queries"], "results": results}

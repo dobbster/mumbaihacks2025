@@ -6,15 +6,27 @@ from dotenv import load_dotenv
 import requests
 from tavily import TavilyClient
 from together import Together
+from pymongo import MongoClient
+from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 
 from langgraph.graph import StateGraph, START, END
 from typing_extensions import TypedDict
+from app.core.ingestion import IngestionService
+from app.core.vectorization import VectorizationService
+from app.core.storage import StorageService
+from app.core.models import DataPoint
 
 load_dotenv()
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 tavily_client = TavilyClient(TAVILY_API_KEY)
 together_client = Together(api_key=TOGETHER_API_KEY)
+
+# Initialize services (adjust model and DB details as needed)
+mongo_client = MongoClient("mongodb://localhost:27017/")
+vectorization_service = VectorizationService(HuggingFaceBgeEmbeddings(model_name="BAAI/bge-base-en-v1.5"))
+storage_service = StorageService(mongo_client)
+ingestion_service = IngestionService(vectorization_service, storage_service)
 
 
 class State(TypedDict):
@@ -68,7 +80,7 @@ def tavily_search_node(state: State) -> State:
                     "title": res.get("title"),
                     "content": res.get("content"),
                     "url": res.get("url"),
-                    "published_at": res.get("published_at"),
+                    "published_at": res.get("published_at",datetime.datetime.utcnow().isoformat() + "Z"),
                     "author": res.get("author"),
                     "categories": res.get("categories", []),
                     "search_query": q,
@@ -95,14 +107,38 @@ def tavily_search_node(state: State) -> State:
     return state
 
 
+def ingestion_node(state: State) -> State:
+    """Ingest results from Tavily search node using full pipeline."""
+    raw_results = state.get("results", [])
+    # Convert raw results to DataPoint objects
+    # print("Ingesting results:", raw_results)
+    datapoints = []
+    for item in raw_results:
+        try:
+            # print("Processing item:", item)
+            datapoint = DataPoint(**item)
+            datapoints.append(datapoint)
+        except Exception as e:
+            # Optionally log or collect errors
+            print("Error processing item:", item, "Error:", e)
+            continue
+    # Ingest datapoints (vectorize and store)
+    stats = ingestion_service.ingest_datapoints(datapoints)
+    state["ingested_results"] = datapoints
+    state["ingestion_stats"] = stats
+    return state
+
+
 # Create the graph
 graph_builder = StateGraph(State)
 graph_builder.add_node("planner", planner_node)
 graph_builder.add_node("tavily_search", tavily_search_node)
+graph_builder.add_node("ingestion", ingestion_node)
 graph_builder.add_node("echo", echo_node)
 graph_builder.add_edge(START, "planner")
 graph_builder.add_edge("planner", "tavily_search")
-graph_builder.add_edge("tavily_search", "echo")
+graph_builder.add_edge("tavily_search", "ingestion")
+graph_builder.add_edge("ingestion", "echo")
 graph_builder.add_edge("echo", END)
 
 graph = graph_builder.compile()

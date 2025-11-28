@@ -14,7 +14,7 @@ class DataPoint(BaseModel):
     title: str
     content: str
     url: str
-    published_at: str  # ISO format datetime string
+    published_at: Optional[str] = None  # ISO format datetime string
     author: Optional[str] = None
     categories: List[str] = Field(default_factory=list)
     ingested_at: str  # ISO format datetime string
