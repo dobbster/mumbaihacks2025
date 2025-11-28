@@ -12,6 +12,7 @@ from app.core.vectorization import VectorizationService
 from app.core.storage import StorageService
 from app.core.clustering import ClusteringService
 from app.core.pattern_detection import PatternDetectionService
+from app.core.classification import ClassificationService
 
 logger = logging.getLogger(__name__)
 
@@ -112,4 +113,9 @@ def get_pattern_detection_service() -> PatternDetectionService:
     storage_service = get_storage_service()
     clustering_service = get_clustering_service()
     return PatternDetectionService(storage_service, clustering_service)
+
+
+def get_classification_service() -> ClassificationService:
+    """Get classification service."""
+    return ClassificationService()
 

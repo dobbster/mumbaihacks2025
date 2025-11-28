@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from app.routes import health, ingestion, clustering, pattern_detection
+from app.routes import health, ingestion, clustering, pattern_detection, classification
 
 app = FastAPI(
     title="Mumbai Hacks 2025 LangGraph Server",
@@ -15,4 +15,5 @@ app.include_router(health.router, tags=["health"])
 app.include_router(ingestion.router)
 app.include_router(clustering.router)
 app.include_router(pattern_detection.router)
+app.include_router(classification.router)
 
