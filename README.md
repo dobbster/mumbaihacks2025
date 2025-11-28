@@ -32,9 +32,21 @@ This project uses `uv` for dependency management.
    uv sync
    ```
 
-3. Create a `.env` file (optional, for environment variables):
+3. Set up MongoDB with Docker:
    ```bash
-   touch .env
+   docker-compose up -d
+   ```
+   See `DOCKER_SETUP.md` for detailed instructions.
+
+4. Create a `.env` file with your configuration:
+   ```bash
+   # MongoDB Configuration
+   MONGODB_URL=mongodb://localhost:27017
+   MONGODB_DB_NAME=misinformation_detection
+   
+   # Together AI Configuration
+   TOGETHER_API_KEY=your_api_key_here
+   TOGETHER_EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
    ```
 
 ## Running the Server
@@ -42,7 +54,7 @@ This project uses `uv` for dependency management.
 Start the LangGraph development server:
 
 ```bash
-langgraph dev
+langgraph dev --allow-blocking --no-browser
 ```
 
 The server will start and be available at the default LangGraph endpoint. The custom `/health` endpoint will be available at `/health`.
@@ -72,4 +84,14 @@ Expected response:
 - `langgraph-api`: LangGraph API server
 - `fastapi`: Web framework for custom routes
 - `uvicorn`: ASGI server
+- `langchain-together`: Together AI embeddings integration
+- `pymongo`: MongoDB driver
+- `scikit-learn`: DBSCAN clustering
+
+## Documentation
+
+- `DOCKER_SETUP.md`: MongoDB Docker setup guide
+- `TOGETHER_AI_SETUP.md`: Together AI configuration
+- `INGESTION_PLAN.md`: Data ingestion workflow
+- `CLUSTERING_RECOMMENDATIONS.md`: Clustering setup and tuning
 

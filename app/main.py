@@ -2,14 +2,15 @@
 
 from fastapi import FastAPI
 
-from app.routes import health
+from app.routes import health, ingestion
 
 app = FastAPI(
     title="Mumbai Hacks 2025 LangGraph Server",
-    description="LangGraph server with custom health endpoint",
+    description="LangGraph server for misinformation detection",
     version="0.1.0",
 )
 
 # Include custom routes
 app.include_router(health.router, tags=["health"])
+app.include_router(ingestion.router)
 

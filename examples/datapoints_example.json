@@ -1,0 +1,87 @@
+[
+  {
+    "id": "rss_001",
+    "source_type": "rss",
+    "source_name": "BBC News",
+    "source_url": "https://feeds.bbci.co.uk/news/rss.xml",
+    "title": "Health officials warn of new virus variant spreading rapidly",
+    "content": "Health officials have issued a warning about a new virus variant that appears to be spreading more rapidly than previous strains. The variant, detected in multiple countries, shows increased transmissibility. Experts recommend continued vaccination and mask-wearing in crowded areas.",
+    "url": "https://www.bbc.com/news/health/article-12345",
+    "published_at": "2025-01-15T10:30:00Z",
+    "author": "BBC Health Correspondent",
+    "categories": ["health", "virus", "public_health"],
+    "ingested_at": "2025-01-15T10:35:00Z"
+  },
+  {
+    "id": "rss_002",
+    "source_type": "rss",
+    "source_name": "Reuters Health",
+    "source_url": "https://www.reuters.com/rssFeed/healthNews",
+    "title": "Study finds no link between vaccines and serious side effects",
+    "content": "A comprehensive study published today found no evidence linking vaccines to serious long-term side effects. The research, conducted over five years with 100,000 participants, provides strong evidence for vaccine safety. Medical experts welcome the findings.",
+    "url": "https://www.reuters.com/health/vaccine-study-123",
+    "published_at": "2025-01-15T09:15:00Z",
+    "author": "Reuters Health Team",
+    "categories": ["health", "vaccines", "research"],
+    "ingested_at": "2025-01-15T09:20:00Z"
+  },
+  {
+    "id": "tavily_001",
+    "source_type": "tavily",
+    "source_name": "Tavily Search",
+    "source_url": "https://api.tavily.com",
+    "title": "Breaking: Emergency declared in coastal region due to natural disaster",
+    "content": "Authorities have declared a state of emergency in the coastal region following severe flooding. Evacuation orders have been issued for low-lying areas. Emergency services are on high alert. Residents are advised to follow official guidance and avoid affected areas.",
+    "url": "https://example-news.com/emergency-declaration",
+    "published_at": "2025-01-15T11:00:00Z",
+    "author": null,
+    "categories": ["emergency", "natural_disaster", "flooding"],
+    "search_query": "coastal flooding emergency",
+    "relevance_score": 0.92,
+    "ingested_at": "2025-01-15T11:05:00Z"
+  },
+  {
+    "id": "tavily_002",
+    "source_type": "tavily",
+    "source_name": "Tavily Search",
+    "source_url": "https://api.tavily.com",
+    "title": "Social media claims about vaccine dangers are false, experts confirm",
+    "content": "Medical experts have debunked viral social media claims suggesting vaccines cause dangerous side effects. Multiple fact-checking organizations have verified that the claims are based on misinformation. Health authorities urge the public to rely on official sources.",
+    "url": "https://factcheck.org/vaccine-claims-debunked",
+    "published_at": "2025-01-15T08:45:00Z",
+    "author": "Fact Check Organization",
+    "categories": ["health", "misinformation", "fact_check"],
+    "search_query": "vaccine safety misinformation",
+    "relevance_score": 0.88,
+    "ingested_at": "2025-01-15T08:50:00Z"
+  },
+  {
+    "id": "rss_003",
+    "source_type": "rss",
+    "source_name": "AP News",
+    "source_url": "https://feeds.apnews.com/rss/topnews",
+    "title": "Government announces new health guidelines for public spaces",
+    "content": "The government has announced updated health guidelines for public spaces, including recommendations for ventilation and crowd management. The guidelines are based on the latest scientific evidence and aim to reduce transmission risks while allowing normal activities to continue.",
+    "url": "https://apnews.com/health-guidelines-2025",
+    "published_at": "2025-01-15T07:20:00Z",
+    "author": "AP Health Reporter",
+    "categories": ["health", "government", "public_health"],
+    "ingested_at": "2025-01-15T07:25:00Z"
+  },
+  {
+    "id": "tavily_003",
+    "source_type": "tavily",
+    "source_name": "Tavily Search",
+    "source_url": "https://api.tavily.com",
+    "title": "Rumors about water contamination prove unfounded",
+    "content": "Local authorities have confirmed that rumors circulating about water contamination in the city are false. Water quality tests show all samples are within safe limits. Officials suspect the rumors may have been spread intentionally to cause panic.",
+    "url": "https://local-news.com/water-quality-report",
+    "published_at": "2025-01-15T06:30:00Z",
+    "author": "Local News Reporter",
+    "categories": ["public_safety", "misinformation", "water_quality"],
+    "search_query": "water contamination rumors",
+    "relevance_score": 0.85,
+    "ingested_at": "2025-01-15T06:35:00Z"
+  }
+]
+

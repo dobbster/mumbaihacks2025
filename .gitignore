@@ -48,3 +48,7 @@ Thumbs.db
 # UV
 .uv/
 
+# Docker
+docker/mongo-init/*.js
+!docker/mongo-init/01-init-db.js
+

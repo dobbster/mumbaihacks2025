@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: misinformation_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      # MongoDB authentication (optional but recommended)
+      # Set MONGO_ROOT_USERNAME and MONGO_ROOT_PASSWORD in .env to enable auth
+      # Leave unset to disable authentication (development only)
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-}
+      MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME:-misinformation_detection}
+    volumes:
+      # Persistent storage for MongoDB data
+      - mongodb_data:/data/db
+      # Persistent storage for MongoDB config
+      - mongodb_config:/data/configdb
+      # Optional: Initialize database with scripts
+      - ./docker/mongo-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - misinformation_network
+    healthcheck:
+      # Health check works with or without authentication
+      test: |
+        if [ -n "$MONGO_INITDB_ROOT_USERNAME" ]; then
+          mongosh --eval "db.runCommand('ping')" --username ${MONGO_INITDB_ROOT_USERNAME} --password ${MONGO_ROOT_PASSWORD} --authenticationDatabase admin --quiet
+        else
+          mongosh --eval "db.runCommand('ping')" --quiet
+        fi
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+
+networks:
+  misinformation_network:
+    driver: bridge
+
