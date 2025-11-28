@@ -43,7 +43,7 @@ Thumbs.db
 
 # LangGraph
 .langgraph/
-.langgraph_api/
+.langgraph_api/*
 
 # UV
 .uv/
