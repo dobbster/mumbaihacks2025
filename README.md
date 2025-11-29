@@ -13,6 +13,12 @@ This system uses LangGraph to orchestrate a multi-stage misinformation detection
 5. **Pattern Detection**: Analyzes clusters for misinformation patterns (rapid growth, source credibility, contradictions, narrative evolution)
 6. **Classification**: Uses LLM to classify claims as misinformation, legitimate, or uncertain
 
+### System Architecture
+
+![System Architecture Diagram](docs/images/system-architecture.png)
+
+*The diagram above illustrates the complete data flow from user interaction through data ingestion, storage, clustering, and LLM-based analysis to provide fact/fake classification results.*
+
 ## Project Structure
 
 ```
