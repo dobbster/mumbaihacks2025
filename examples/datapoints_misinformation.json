@@ -1,0 +1,61 @@
+[
+  {
+    "id": "misinfo_001",
+    "source_type": "tavily",
+    "source_name": "Tavily Search",
+    "source_url": "https://api.tavily.com",
+    "title": "Social media claims about vaccine dangers are false, experts confirm",
+    "content": "Medical experts have debunked viral social media claims suggesting vaccines cause dangerous side effects. Multiple fact-checking organizations have verified that the claims are based on misinformation. Health authorities urge the public to rely on official sources.",
+    "url": "https://factcheck.org/vaccine-claims-debunked",
+    "published_at": "2025-01-15T08:45:00Z",
+    "author": "Fact Check Organization",
+    "categories": ["health", "misinformation", "fact_check"],
+    "search_query": "vaccine safety misinformation",
+    "relevance_score": 0.88,
+    "ingested_at": "2025-01-15T08:50:00Z"
+  },
+  {
+    "id": "misinfo_002",
+    "source_type": "tavily",
+    "source_name": "Tavily Search",
+    "source_url": "https://api.tavily.com",
+    "title": "Rumors about water contamination prove unfounded",
+    "content": "Local authorities have confirmed that rumors circulating about water contamination in the city are false. Water quality tests show all samples are within safe limits. Officials suspect the rumors may have been spread intentionally to cause panic.",
+    "url": "https://local-news.com/water-quality-report",
+    "published_at": "2025-01-15T06:30:00Z",
+    "author": "Local News Reporter",
+    "categories": ["public_safety", "misinformation", "water_quality"],
+    "search_query": "water contamination rumors",
+    "relevance_score": 0.85,
+    "ingested_at": "2025-01-15T06:35:00Z"
+  },
+  {
+    "id": "misinfo_003",
+    "source_type": "rss",
+    "source_name": "AP News",
+    "source_url": "https://feeds.apnews.com/rss/topnews",
+    "title": "Fact-checkers debunk viral claim about government health measures",
+    "content": "Multiple fact-checking organizations have verified that a viral claim circulating on social media about government health measures is false. The claim misrepresents official policies and has been shared thousands of times. Experts warn that such misinformation can undermine public trust in health authorities.",
+    "url": "https://apnews.com/fact-check-health-measures",
+    "published_at": "2025-01-15T17:00:00Z",
+    "author": "AP Fact Check Team",
+    "categories": ["health", "misinformation", "fact_check", "government"],
+    "ingested_at": "2025-01-15T17:05:00Z"
+  },
+  {
+    "id": "misinfo_004",
+    "source_type": "tavily",
+    "source_name": "Tavily Search",
+    "source_url": "https://api.tavily.com",
+    "title": "False rumors about food safety spread online, officials clarify",
+    "content": "Health officials have clarified that rumors circulating online about food safety issues are completely false. Laboratory tests confirm that all food products meet safety standards. Authorities are investigating the source of the misinformation and urge the public to verify information through official channels.",
+    "url": "https://health-dept.gov/food-safety-clarification",
+    "published_at": "2025-01-15T18:30:00Z",
+    "author": null,
+    "categories": ["public_safety", "misinformation", "food_safety"],
+    "search_query": "food safety rumors misinformation",
+    "relevance_score": 0.83,
+    "ingested_at": "2025-01-15T18:35:00Z"
+  }
+]
+

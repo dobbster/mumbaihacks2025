@@ -41,14 +41,29 @@ ENV/
 .DS_Store
 Thumbs.db
 
+# Logs
+*.log
+
+# FastAPI
+*.sqlite3
+
 # LangGraph
 .langgraph/
-.langgraph_api/
+.langgraph_api/*
 
-# UV
-.uv/
+# Misc
+*.bak
+
+# Ignore test outputs
+*.coverage
+
+# Ignore notebook checkpoints
+.ipynb_checkpoints/
 
 # Docker
 docker/mongo-init/*.js
 !docker/mongo-init/01-init-db.js
+
+# .langraph
+.langraph/
 

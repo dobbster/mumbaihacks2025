@@ -3,7 +3,7 @@
 import json
 import logging
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 
 from app.core.models import DataPoint, StoredDataPoint
@@ -79,16 +79,35 @@ class IngestionService:
         logger.info(f"Loaded {len(datapoints)} datapoints from dict")
         return datapoints
     
-    def process_datapoint(self, datapoint: DataPoint) -> StoredDataPoint:
+    def process_datapoint(self, datapoint: DataPoint, skip_if_exists: bool = True) -> Optional[StoredDataPoint]:
         """
         Process a single datapoint: vectorize and prepare for storage.
         
         Args:
             datapoint: DataPoint to process
+            skip_if_exists: If True, skip processing if duplicate exists
             
         Returns:
-            StoredDataPoint ready for MongoDB
+            StoredDataPoint ready for MongoDB, or None if duplicate found
         """
+        # Check for existing datapoint (deduplication)
+        # Priority: URL (most reliable) > ID (may be deterministic)
+        if skip_if_exists:
+            existing = None
+            # First check by URL (most reliable - URLs are unique per article)
+            if datapoint.url:
+                existing = self.storage_service.datapoint_exists(url=datapoint.url)
+                if existing:
+                    logger.debug(f"Duplicate datapoint found by URL: {datapoint.url}, skipping")
+                    return None
+            
+            # If no URL, check by ID (fallback)
+            if not existing and datapoint.id:
+                existing = self.storage_service.datapoint_exists(datapoint_id=datapoint.id)
+                if existing:
+                    logger.debug(f"Duplicate datapoint found by ID: {datapoint.id}, skipping")
+                    return None
+        
         # Prepare text for embedding (combine title + content)
         text_for_embedding = self._prepare_text_for_embedding(datapoint)
         
@@ -124,25 +143,33 @@ class IngestionService:
     def ingest_datapoints(
         self,
         datapoints: List[DataPoint],
-        batch_size: int = 10
+        batch_size: int = 10,
+        skip_duplicates: bool = True
     ) -> Dict[str, Any]:
         """
         Ingest multiple datapoints: vectorize and store in MongoDB.
+        When duplicates are found, retrieves existing datapoints from MongoDB.
         
         Args:
             datapoints: List of DataPoint objects to ingest
             batch_size: Number of datapoints to process in parallel
+            skip_duplicates: If True, skip duplicate datapoints (by ID or URL) and retrieve existing ones
             
         Returns:
-            Dictionary with ingestion statistics
+            Dictionary with ingestion statistics and retrieved duplicates
         """
         stats = {
             "total": len(datapoints),
             "processed": 0,
             "stored": 0,
+            "skipped_duplicates": 0,
+            "retrieved_duplicates": 0,  # New: count of retrieved duplicates
             "failed": 0,
             "errors": []
         }
+        
+        # List to store retrieved duplicate datapoints (converted back to DataPoint format)
+        retrieved_duplicates: List[DataPoint] = []
         
         # Process in batches
         for i in range(0, len(datapoints), batch_size):
@@ -151,8 +178,32 @@ class IngestionService:
             
             for datapoint in batch:
                 try:
-                    # Process datapoint (includes embedding generation)
-                    stored = self.process_datapoint(datapoint)
+                    # Process datapoint (includes deduplication check and embedding generation)
+                    stored = self.process_datapoint(datapoint, skip_if_exists=skip_duplicates)
+                    
+                    if stored is None:
+                        # Duplicate found - retrieve existing datapoint from MongoDB
+                        stats["skipped_duplicates"] += 1
+                        
+                        # Try to retrieve by URL first (most reliable)
+                        existing_doc = None
+                        if datapoint.url:
+                            existing_doc = self.storage_service.datapoint_exists(url=datapoint.url)
+                        
+                        # Fallback to ID if URL check didn't find it
+                        if not existing_doc and datapoint.id:
+                            existing_doc = self.storage_service.datapoint_exists(datapoint_id=datapoint.id)
+                        
+                        if existing_doc:
+                            # Convert MongoDB document back to DataPoint format
+                            retrieved_dp = self._mongo_doc_to_datapoint(existing_doc)
+                            retrieved_duplicates.append(retrieved_dp)
+                            stats["retrieved_duplicates"] += 1
+                            logger.debug(f"Retrieved existing datapoint from MongoDB: {datapoint.id or datapoint.url}")
+                        else:
+                            logger.warning(f"Duplicate detected but could not retrieve from MongoDB: {datapoint.id}")
+                        continue
+                    
                     stats["processed"] += 1
                     
                     # Store in MongoDB
@@ -166,7 +217,7 @@ class IngestionService:
                     # Extract more detailed error information
                     error_msg = str(e)
                     error_type = type(e).__name__
-                    
+
                     # Provide helpful error messages
                     if "Connection" in error_type or "connection" in error_msg.lower():
                         error_msg = (
@@ -181,7 +232,7 @@ class IngestionService:
                             f"Blocking operation detected. "
                             f"Restart LangGraph server with: langgraph dev --allow-blocking"
                         )
-                    
+
                     error_info = {
                         "datapoint_id": datapoint.id,
                         "error": error_msg,
@@ -189,13 +240,56 @@ class IngestionService:
                     }
                     stats["errors"].append(error_info)
                     logger.error(f"Failed to ingest datapoint {datapoint.id}: {e}", exc_info=True)
-        
+
         logger.info(
             f"Ingestion complete: {stats['stored']}/{stats['total']} stored, "
+            f"{stats['skipped_duplicates']} duplicates skipped ({stats['retrieved_duplicates']} retrieved), "
             f"{stats['failed']} failed"
         )
+
+        # Add retrieved duplicates to stats for downstream use
+        stats["retrieved_duplicates_list"] = [dp.model_dump() for dp in retrieved_duplicates]
         
         return stats
+    
+    def _mongo_doc_to_datapoint(self, doc: Dict[str, Any]) -> DataPoint:
+        """
+        Convert a MongoDB document back to a DataPoint object.
+        
+        Args:
+            doc: MongoDB document dictionary
+            
+        Returns:
+            DataPoint object
+        """
+        # Convert datetime objects to ISO format strings
+        published_at = doc.get("published_at")
+        if published_at and isinstance(published_at, datetime):
+            published_at = published_at.isoformat() + "Z"
+        elif published_at:
+            published_at = str(published_at)
+        
+        ingested_at = doc.get("ingested_at")
+        if ingested_at and isinstance(ingested_at, datetime):
+            ingested_at = ingested_at.isoformat() + "Z"
+        elif ingested_at:
+            ingested_at = str(ingested_at)
+        
+        return DataPoint(
+            id=doc.get("_id") or doc.get("id", ""),
+            source_type=doc.get("source_type", ""),
+            source_name=doc.get("source_name", ""),
+            source_url=doc.get("source_url", ""),
+            title=doc.get("title", ""),
+            content=doc.get("content", ""),
+            url=doc.get("url", ""),
+            published_at=published_at,
+            author=doc.get("author"),
+            categories=doc.get("categories", []),
+            ingested_at=ingested_at or datetime.utcnow().isoformat() + "Z",
+            search_query=doc.get("search_query"),
+            relevance_score=doc.get("relevance_score")
+        )
     
     def _prepare_text_for_embedding(self, datapoint: DataPoint) -> str:
         """

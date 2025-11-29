@@ -1,0 +1,59 @@
+[
+  {
+    "id": "emergency_001",
+    "source_type": "tavily",
+    "source_name": "Tavily Search",
+    "source_url": "https://api.tavily.com",
+    "title": "Breaking: Emergency declared in coastal region due to natural disaster",
+    "content": "Authorities have declared a state of emergency in the coastal region following severe flooding. Evacuation orders have been issued for low-lying areas. Emergency services are on high alert. Residents are advised to follow official guidance and avoid affected areas.",
+    "url": "https://example-news.com/emergency-declaration",
+    "published_at": "2025-01-15T11:00:00Z",
+    "author": null,
+    "categories": ["emergency", "natural_disaster", "flooding"],
+    "search_query": "coastal flooding emergency",
+    "relevance_score": 0.92,
+    "ingested_at": "2025-01-15T11:05:00Z"
+  },
+  {
+    "id": "emergency_002",
+    "source_type": "rss",
+    "source_name": "AP News",
+    "source_url": "https://feeds.apnews.com/rss/topnews",
+    "title": "Coastal cities brace for severe flooding as storm system approaches",
+    "content": "Emergency management officials in coastal cities are preparing for severe flooding as a major storm system moves toward the region. Evacuation centers have been set up and residents in flood-prone areas are being urged to relocate. The National Weather Service has issued flood warnings for multiple counties.",
+    "url": "https://apnews.com/coastal-flooding-warning",
+    "published_at": "2025-01-15T13:20:00Z",
+    "author": "AP Weather Reporter",
+    "categories": ["emergency", "natural_disaster", "flooding", "weather"],
+    "ingested_at": "2025-01-15T13:25:00Z"
+  },
+  {
+    "id": "emergency_003",
+    "source_type": "tavily",
+    "source_name": "Tavily Search",
+    "source_url": "https://api.tavily.com",
+    "title": "Thousands evacuated as flooding worsens in coastal areas",
+    "content": "Emergency services have evacuated thousands of residents from coastal areas as flooding continues to worsen. Multiple roads are closed and rescue operations are underway. Local authorities are coordinating with state and federal agencies to provide assistance to affected communities.",
+    "url": "https://emergency-news.com/flooding-evacuations",
+    "published_at": "2025-01-15T14:00:00Z",
+    "author": null,
+    "categories": ["emergency", "natural_disaster", "flooding", "evacuation"],
+    "search_query": "coastal flooding evacuation",
+    "relevance_score": 0.90,
+    "ingested_at": "2025-01-15T14:05:00Z"
+  },
+  {
+    "id": "emergency_004",
+    "source_type": "rss",
+    "source_name": "BBC News",
+    "source_url": "https://feeds.bbci.co.uk/news/rss.xml",
+    "title": "State of emergency extended as natural disaster recovery continues",
+    "content": "The state of emergency has been extended for another week as recovery efforts continue following the natural disaster. Emergency response teams are working around the clock to restore essential services and provide aid to affected residents. Damage assessments are ongoing.",
+    "url": "https://www.bbc.com/news/emergency-recovery",
+    "published_at": "2025-01-15T15:30:00Z",
+    "author": "BBC Emergency Correspondent",
+    "categories": ["emergency", "natural_disaster", "recovery"],
+    "ingested_at": "2025-01-15T15:35:00Z"
+  }
+]
+

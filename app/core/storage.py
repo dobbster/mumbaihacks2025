@@ -39,6 +39,9 @@ class StorageService:
             # Index on cluster_id for clustering queries
             self.datapoints_collection.create_index("cluster_id")
             
+            # Index on URL for deduplication
+            self.datapoints_collection.create_index("url")
+            
             # Text index for search
             self.datapoints_collection.create_index([("title", "text"), ("content", "text")])
             
@@ -148,4 +151,27 @@ class StorageService:
     def get_datapoints_by_cluster(self, cluster_id: str) -> List[Dict[str, Any]]:
         """Get all datapoints in a specific cluster."""
         return list(self.datapoints_collection.find({"cluster_id": cluster_id}))
+    
+    def datapoint_exists(self, datapoint_id: str = None, url: str = None) -> Optional[Dict[str, Any]]:
+        """
+        Check if a datapoint already exists in the database.
+        
+        Args:
+            datapoint_id: Optional datapoint ID to check
+            url: Optional URL to check (for deduplication)
+            
+        Returns:
+            Existing datapoint document if found, None otherwise
+        """
+        if datapoint_id:
+            existing = self.datapoints_collection.find_one({"_id": datapoint_id})
+            if existing:
+                return existing
+        
+        if url:
+            existing = self.datapoints_collection.find_one({"url": url})
+            if existing:
+                return existing
+        
+        return None
 

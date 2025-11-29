@@ -10,6 +10,11 @@ from langchain_core.embeddings import Embeddings
 from app.core.ingestion import IngestionService
 from app.core.vectorization import VectorizationService
 from app.core.storage import StorageService
+from app.core.clustering import ClusteringService
+from app.core.pattern_detection import PatternDetectionService
+from app.core.classification import ClassificationService
+from app.core.verification import VerificationService
+from app.core.public_updates import PublicUpdateService
 
 logger = logging.getLogger(__name__)
 
@@ -24,24 +29,41 @@ def get_mongo_client() -> MongoClient:
     Otherwise, constructs URL from MONGO_ROOT_USERNAME and MONGO_ROOT_PASSWORD if available.
     """
     mongo_url = os.getenv("MONGODB_URL")
-    
-    # If MONGODB_URL is explicitly set, use it
-    if mongo_url:
-        return MongoClient(mongo_url)
-    
-    # Otherwise, try to construct from individual credentials
     username = os.getenv("MONGO_ROOT_USERNAME", "admin")
     password = os.getenv("MONGO_ROOT_PASSWORD", "changeme")
     db_name = os.getenv("MONGODB_DB_NAME", "misinformation_detection")
     
-    if username and password:
-        # Construct authenticated connection string
-        mongo_url = f"mongodb://{username}:{password}@localhost:27017/{db_name}?authSource=admin"
-        logger.info("Using MongoDB with authentication")
+    # If MONGODB_URL is set but doesn't contain credentials, construct authenticated URL
+    if mongo_url and "@" not in mongo_url and username and password:
+        # MONGODB_URL provided but no credentials - add them
+        # Extract host/port from MONGODB_URL or use defaults
+        if "://" in mongo_url:
+            # Extract everything after mongodb://
+            parts = mongo_url.split("://", 1)[1]
+            if "/" in parts:
+                host_port = parts.split("/")[0]
+            else:
+                host_port = parts.split("?")[0] if "?" in parts else parts
+        else:
+            host_port = "localhost:27017"
+        
+        mongo_url = f"mongodb://{username}:{password}@{host_port}/{db_name}?authSource=admin"
+        logger.info("Using MongoDB with authentication (credentials added to MONGODB_URL)")
+    elif not mongo_url:
+        # No MONGODB_URL provided - construct from individual credentials
+        if username and password:
+            # Construct authenticated connection string
+            mongo_url = f"mongodb://{username}:{password}@localhost:27017/{db_name}?authSource=admin"
+            logger.info("Using MongoDB with authentication")
+        else:
+            # No authentication
+            mongo_url = "mongodb://localhost:27017"
+            logger.info("Using MongoDB without authentication")
+    # If MONGODB_URL is set and contains credentials, use it as-is
+    elif mongo_url and "@" in mongo_url:
+        logger.info("Using MongoDB with authentication (from MONGODB_URL)")
     else:
-        # No authentication
-        mongo_url = "mongodb://localhost:27017"
-        logger.info("Using MongoDB without authentication")
+        logger.info("Using MongoDB without authentication (from MONGODB_URL)")
     
     return MongoClient(mongo_url)
 
@@ -97,4 +119,42 @@ def get_ingestion_service() -> IngestionService:
     vectorization_service = get_vectorization_service()
     storage_service = get_storage_service()
     return IngestionService(vectorization_service, storage_service)
+
+
+def get_clustering_service() -> ClusteringService:
+    """Get clustering service."""
+    storage_service = get_storage_service()
+    return ClusteringService(storage_service)
+
+
+def get_pattern_detection_service() -> PatternDetectionService:
+    """Get pattern detection service."""
+    storage_service = get_storage_service()
+    clustering_service = get_clustering_service()
+    return PatternDetectionService(storage_service, clustering_service)
+
+
+def get_classification_service() -> ClassificationService:
+    """Get classification service."""
+    return ClassificationService()
+
+
+def get_verification_service() -> VerificationService:
+    """Get verification service."""
+    storage_service = get_storage_service()
+    return VerificationService(storage_service)
+
+
+def get_public_update_service() -> PublicUpdateService:
+    """Get public update service."""
+    storage_service = get_storage_service()
+    pattern_service = get_pattern_detection_service()
+    classification_service = get_classification_service()
+    # Verification service is optional - pass None to disable it
+    return PublicUpdateService(
+        storage_service,
+        pattern_service,
+        classification_service,
+        verification_service=None  # Disabled for hackathon
+    )
 
