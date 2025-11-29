@@ -1,8 +1,11 @@
 import React, { useState } from "react";
+import { verifyMisinformation } from "../services/api";
 
 export default function SearchNav() {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const getStatusColor = (status) => {
   if (!status) return "text-gray-300";
@@ -3250,7 +3253,7 @@ const mockData = {
 }
 
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     if (!query.trim()) {
       setResult({
         title: "Please enter something to verify.",
@@ -3262,34 +3265,76 @@ const mockData = {
       });
       return;
     }
-    // Always take public_updates[0]
-    let key = Object.keys(mockData.classifications)[0]
-    const first = key && mockData.classifications[key];
-    if (!first) {
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      // Call the backend API
+      const response = await verifyMisinformation(query.trim(), 5);
+      
+      // Extract classification from the response
+      const classifications = response.classifications || {};
+      const classificationKeys = Object.keys(classifications);
+      
+      if (classificationKeys.length === 0) {
+        setResult({
+          title: response.prompt || query,
+          status: "uncertain",
+          explanation: "No classification results available. The system may need more data to analyze this query.",
+          source: [],
+          confidence: "0%"
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Get the first (most relevant) classification
+      const firstKey = classificationKeys[0];
+      const first = classifications[firstKey];
+      
+      if (!first) {
+        setResult({
+          title: response.prompt || query,
+          status: "uncertain",
+          explanation: "Classification data is incomplete.",
+          source: [],
+          confidence: "0%"
+        });
+        setLoading(false);
+        return;
+      }
+
+      const title = response.prompt || query;
+      const status = first.classification || "uncertain";
+      const explanation = first.reasoning || first.explanation || "No explanation available.";
+
+      // Extract sources from the classification (limit to 5)
+      const source = (first.sources && Array.isArray(first.sources) && first.sources.length > 0) 
+        ? first.sources.slice(0, 5)
+        : [];
+
+      // Convert confidence to percentage (rounded)
+      const confidencePct =
+        typeof first.confidence === "number"
+          ? `${Math.round(first.confidence * 100)}%`
+          : "-";
+
+      setResult({ title, status, explanation, source, confidence: confidencePct });
+    } catch (err) {
+      console.error("Error verifying misinformation:", err);
+      setError(err.message || "Failed to verify. Please try again.");
       setResult({
-        title: "No updates available",
-        status: "-",
-        explanation: "-",
-        source: "-",
+        title: query,
+        status: "error",
+        explanation: `Error: ${err.message || "Failed to connect to the verification service."}`,
+        source: [],
         confidence: "0%"
       });
-      return;
+    } finally {
+      setLoading(false);
     }
-
-    const title = mockData.prompt || "-";
-    const status = first.classification || "-";
-    const explanation = first.reasoning || "-";
-
-    // choose first source URL if available
-    const source = (first.sources && first.sources.length > 0) ? first.sources : [];
-
-    // convert confidence to percentage (rounded)
-    const confidencePct =
-      typeof first.confidence === "number"
-        ? `${Math.round(first.confidence * 100)}%`
-        : "-";
-
-    setResult({ title, status, explanation, source, confidence: confidencePct });
   };
 
   return (
@@ -3308,9 +3353,10 @@ const mockData = {
 
             <button
               onClick={handleVerify}
-              className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700 transition"
+              disabled={loading}
+              className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Verify
+              {loading ? "Verifying..." : "Verify"}
             </button>
 
             <button
@@ -3323,22 +3369,30 @@ const mockData = {
 
           {/* Result Container */}
           <div className="mt-3 p-3 bg-gray-700 rounded-lg text-sm text-gray-200">
+            {loading && (
+              <div className="text-center py-4">
+                <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                <p className="mt-2 text-gray-300">Analyzing your query...</p>
+              </div>
+            )}
+            
+            {error && !loading && (
+              <div className="text-red-400 mb-2">
+                <span className="font-semibold">Error: </span>
+                <span>{error}</span>
+              </div>
+            )}
+
             {result && result.title === 'Please enter something to verify.' ? (
                 <div>
                   <span>{result.title}</span>
                 </div>
-              ) : (
-                ""
-                )}
-            {result && result.title === 'No updates available' ? (
+              ) : result && result.title === 'No updates available' ? (
                 <div>
                   <span className="font-semibold">Title:</span>{" "}
                   <span>{result.title}</span>
                 </div>
-              ) : (
-                ""
-                )}
-            {result && result.title !== 'No updates available' && result.title !== 'Please enter something to verify.' ? (
+              ) : result && !loading && result.title !== 'No updates available' && result.title !== 'Please enter something to verify.' ? (
               <div className="space-y-2">
                 <div>
                   <span className="font-semibold">Title:</span>{" "}
@@ -3360,7 +3414,7 @@ const mockData = {
                 <span className="font-semibold">Sources:</span>
                 <ul className="list-disc ml-6 mt-1 space-y-1">
                   {result.source.length > 0 ? (
-                    result.source.map((src, idx) => (
+                    result.source.slice(0, 5).map((src, idx) => (
                       <li key={idx}>
                         <a
                           href={src}
@@ -3382,9 +3436,9 @@ const mockData = {
                   <span>{result.confidence}</span>
                 </div>
               </div>
-            ) : (
+            ) : !loading && !result ? (
               "Result will appear here."
-            )}
+            ) : null}
           </div>
         </div>
       </div>
