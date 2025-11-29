@@ -12,7 +12,7 @@ class VerifyRequest(BaseModel):
 @router.post("/verify")
 def verify(request: VerifyRequest) -> Dict[str, Any]:
     """
-    Run the complete LangGraph pipeline and return public updates.
+    Run the complete LangGraph pipeline and return classification results.
     
     This endpoint:
     1. Plans search queries from the prompt
@@ -21,9 +21,8 @@ def verify(request: VerifyRequest) -> Dict[str, Any]:
     4. Clusters datapoints by topic
     5. Detects misinformation patterns
     6. Classifies clusters
-    7. Generates public updates
     
-    Returns the public_updates from the final state.
+    Returns the classifications from the final state.
     """
     # Initialize state with all required fields
     initial_state = {
@@ -35,30 +34,28 @@ def verify(request: VerifyRequest) -> Dict[str, Any]:
         "clusters": None,
         "clustering_stats": None,
         "pattern_analyses": None,
-        "classifications": None,
-        "public_updates": None
+        "classifications": None
     }
     
     # Run the complete LangGraph pipeline
     final_state = graph.invoke(initial_state)
     
-    # Extract public updates from the final state
-    public_updates = final_state.get("public_updates", [])
+    # Extract classifications from the final state
+    classifications = final_state.get("classifications", {})
     
-    # Return comprehensive results including public updates
+    # Return comprehensive results including classifications
     return {
         "status": "success",
         "prompt": request.prompt,
         "queries": final_state.get("queries"),
         "results": final_state.get("results"),
-        "public_updates": public_updates,
+        "classifications": classifications,
         "summary": {
             "total_clusters": len(final_state.get("clusters", {})),
-            "total_public_updates": len(public_updates),
+            "total_classifications": len(classifications),
             "ingestion_stats": final_state.get("ingestion_stats"),
             "clustering_stats": final_state.get("clustering_stats")
         },
         "clusters": final_state.get("clusters"),
-        "pattern_analyses": final_state.get("pattern_analyses"),
-        "classifications": final_state.get("classifications")
+        "pattern_analyses": final_state.get("pattern_analyses")
     }

@@ -20,8 +20,8 @@ from app.dependencies import (
     get_clustering_service,
     get_pattern_detection_service,
     get_classification_service,
-    get_public_update_service,
-    get_storage_service
+    get_storage_service,
+    get_vectorization_service
 )
 
 logger = logging.getLogger(__name__)
@@ -85,12 +85,147 @@ class State(TypedDict):
     clustering_stats: Optional[Dict[str, Any]]
     pattern_analyses: Optional[Dict[str, Dict[str, Any]]]
     classifications: Optional[Dict[str, Any]]
-    public_updates: Optional[List[Dict[str, Any]]]
 
 
-def echo_node(state: State) -> State:
-    """Echo the last message."""
-    return {"messages": state["messages"]}
+def generate_topic_representation(cluster_datapoints: List[Dict[str, Any]]) -> str:
+    """
+    Generate a concise topic representation for a cluster based on its datapoints.
+    
+    Args:
+        cluster_datapoints: List of datapoint documents in the cluster
+        
+    Returns:
+        Concise topic representation string
+    """
+    if not cluster_datapoints:
+        return "Unknown topic"
+    
+    # Extract titles and first sentences from content
+    titles = []
+    keywords = []
+    
+    for dp in cluster_datapoints[:5]:  # Use first 5 datapoints
+        title = dp.get("title", "").strip()
+        if title:
+            titles.append(title)
+        
+        content = dp.get("content", "").strip()
+        if content:
+            # Get first sentence
+            first_sentence = content.split('.')[0].strip()
+            if len(first_sentence) > 20:
+                keywords.append(first_sentence[:100])  # Limit length
+    
+    # Combine titles and keywords
+    all_text = " ".join(titles + keywords)
+    
+    # Extract common keywords (simple approach)
+    words = all_text.lower().split()
+    # Filter common stop words
+    stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "should", "could", "may", "might", "must", "can"}
+    meaningful_words = [w for w in words if len(w) > 3 and w not in stop_words]
+    
+    # Count word frequency
+    from collections import Counter
+    word_freq = Counter(meaningful_words)
+    top_words = [word for word, count in word_freq.most_common(5)]
+    
+    # Create topic representation
+    if top_words:
+        topic = " ".join(top_words).title()
+        # Add context from first title if available
+        if titles:
+            first_title_words = titles[0].split()[:3]
+            topic = f"{' '.join(first_title_words)} - {topic}"
+        return topic[:150]  # Limit length
+    
+    # Fallback to first title
+    if titles:
+        return titles[0][:150]
+    
+    return "Uncategorized topic"
+
+
+def filter_clusters_by_relevance(
+    clusters: Dict[str, Any],
+    user_prompt: str,
+    vectorization_service: VectorizationService,
+    similarity_threshold: float = 0.5
+) -> Dict[str, Any]:
+    """
+    Filter clusters to only include those relevant to the user's prompt.
+    
+    Args:
+        clusters: Dictionary of clusters with topic_representations
+        user_prompt: User's original query/prompt
+        vectorization_service: Service for generating embeddings
+        similarity_threshold: Minimum cosine similarity to be considered relevant
+        
+    Returns:
+        Filtered clusters dictionary
+    """
+    if not clusters or not user_prompt:
+        return clusters
+    
+    # Generate embedding for user prompt
+    try:
+        prompt_embedding = vectorization_service.generate_embedding(user_prompt.lower())
+    except Exception as e:
+        logger.warning(f"Failed to generate embedding for prompt, returning all clusters: {e}")
+        return clusters
+    
+    # Calculate cosine similarity
+    import numpy as np
+    
+    def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+        vec1 = np.array(vec1)
+        vec2 = np.array(vec2)
+        dot_product = np.dot(vec1, vec2)
+        norm1 = np.linalg.norm(vec1)
+        norm2 = np.linalg.norm(vec2)
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+        return float(dot_product / (norm1 * norm2))
+    
+    filtered_clusters = {}
+    
+    for cluster_id, cluster_data in clusters.items():
+        # Get topic_representation from cluster metadata
+        if isinstance(cluster_data, dict) and "topic_representation" in cluster_data:
+            topic_repr = cluster_data["topic_representation"]
+        elif isinstance(cluster_data, list) and len(cluster_data) > 0:
+            # Generate topic representation from datapoints if not present
+            topic_repr = generate_topic_representation(cluster_data)
+        else:
+            continue
+        
+        # Generate embedding for topic representation
+        try:
+            topic_embedding = vectorization_service.generate_embedding(topic_repr.lower())
+            similarity = cosine_similarity(prompt_embedding, topic_embedding)
+            
+            if similarity >= similarity_threshold:
+                # Add similarity score to cluster metadata
+                if isinstance(cluster_data, dict):
+                    cluster_data["relevance_score"] = similarity
+                    filtered_clusters[cluster_id] = cluster_data
+                else:
+                    # Wrap in dict if it's a list
+                    filtered_clusters[cluster_id] = {
+                        "datapoints": cluster_data,
+                        "topic_representation": topic_repr,
+                        "relevance_score": similarity
+                    }
+                logger.info(f"Cluster {cluster_id} is relevant (similarity: {similarity:.3f}, topic: {topic_repr})")
+            else:
+                logger.debug(f"Cluster {cluster_id} filtered out (similarity: {similarity:.3f} < {similarity_threshold}, topic: {topic_repr})")
+        except Exception as e:
+            logger.warning(f"Failed to check relevance for cluster {cluster_id}: {e}")
+            # Include cluster if relevance check fails (fail open)
+            filtered_clusters[cluster_id] = cluster_data
+    
+    logger.info(f"Filtered clusters: {len(filtered_clusters)}/{len(clusters)} relevant to prompt")
+    return filtered_clusters
 
 
 def planner_node(state: State) -> State:
@@ -263,20 +398,37 @@ def clustering_node(state: State) -> State:
     # Get statistics
     stats = clustering_service.get_cluster_statistics(clusters)
     
-    # Convert clusters to serializable format
+    # Convert clusters to serializable format and add topic_representation
+    vectorization_service = get_vectorization_service()
     clusters_dict = {}
     for cluster_id, datapoints in clusters.items():
-        clusters_dict[cluster_id] = [
-            {
-                "id": dp.get("_id") or dp.get("id"),
-                "title": dp.get("title"),
-                "source_name": dp.get("source_name"),
-                "source_type": dp.get("source_type"),
-                "published_at": str(dp.get("published_at")),
-                "categories": dp.get("categories", [])
-            }
-            for dp in datapoints
-        ]
+        # Generate topic representation for this cluster
+        topic_repr = generate_topic_representation(datapoints)
+        
+        clusters_dict[cluster_id] = {
+            "topic_representation": topic_repr,
+            "datapoints": [
+                {
+                    "id": dp.get("_id") or dp.get("id"),
+                    "title": dp.get("title"),
+                    "source_name": dp.get("source_name"),
+                    "source_type": dp.get("source_type"),
+                    "published_at": str(dp.get("published_at")),
+                    "categories": dp.get("categories", [])
+                }
+                for dp in datapoints
+            ]
+        }
+    
+    # Filter clusters by relevance to user prompt
+    user_prompt = state.get("messages", [""])[-1] if state.get("messages") else ""
+    if user_prompt:
+        clusters_dict = filter_clusters_by_relevance(
+            clusters_dict,
+            user_prompt,
+            vectorization_service,
+            similarity_threshold=0.5
+        )
     
     state["clusters"] = clusters_dict
     state["clustering_stats"] = {
@@ -288,7 +440,7 @@ def clustering_node(state: State) -> State:
 
 
 def pattern_detection_node(state: State) -> State:
-    """Analyze clusters for misinformation patterns."""
+    """Analyze clusters for misinformation patterns - only on the most relevant cluster."""
     pattern_service = get_pattern_detection_service()
     storage_service = get_storage_service()
     clusters = state.get("clusters", {})
@@ -298,26 +450,52 @@ def pattern_detection_node(state: State) -> State:
         state["pattern_analyses"] = {}
         return state
     
-    # Analyze each cluster from state
-    analyses = {}
-    for cluster_id in clusters.keys():
-        try:
-            analysis = pattern_service.analyze_cluster(cluster_id)
-            analyses[cluster_id] = analysis
-        except Exception as e:
-            logger.error(f"Error analyzing cluster {cluster_id}: {e}", exc_info=True)
-            analyses[cluster_id] = {
-                "cluster_id": cluster_id,
-                "error": str(e)
-            }
+    # Find the most relevant cluster (highest relevance_score)
+    most_relevant_cluster_id = None
+    highest_relevance = -1.0
     
-    logger.info(f"Pattern detection complete: analyzed {len(analyses)} clusters")
+    for cluster_id, cluster_data in clusters.items():
+        if isinstance(cluster_data, dict):
+            relevance_score = cluster_data.get("relevance_score", 0.0)
+            if relevance_score > highest_relevance:
+                highest_relevance = relevance_score
+                most_relevant_cluster_id = cluster_id
+    
+    # If no relevance_score found, use the first cluster
+    if most_relevant_cluster_id is None:
+        most_relevant_cluster_id = list(clusters.keys())[0] if clusters else None
+    
+    if most_relevant_cluster_id is None:
+        logger.warning("No cluster found for pattern detection")
+        state["pattern_analyses"] = {}
+        return state
+    
+    # Analyze only the most relevant cluster
+    cluster_data = clusters[most_relevant_cluster_id]
+    topic_repr = "Unknown"
+    if isinstance(cluster_data, dict):
+        topic_repr = cluster_data.get("topic_representation", "Unknown")
+    
+    logger.info(f"Analyzing most relevant cluster {most_relevant_cluster_id} (topic: {topic_repr}, relevance: {highest_relevance:.3f})")
+    
+    analyses = {}
+    try:
+        analysis = pattern_service.analyze_cluster(most_relevant_cluster_id)
+        analyses[most_relevant_cluster_id] = analysis
+    except Exception as e:
+        logger.error(f"Error analyzing cluster {most_relevant_cluster_id}: {e}", exc_info=True)
+        analyses[most_relevant_cluster_id] = {
+            "cluster_id": most_relevant_cluster_id,
+            "error": str(e)
+        }
+    
+    logger.info(f"Pattern detection complete: analyzed 1 most relevant cluster")
     state["pattern_analyses"] = analyses
     return state
 
 
 def classification_node(state: State) -> State:
-    """Classify clusters as misinformation, legitimate, or uncertain."""
+    """Classify the most relevant cluster as misinformation, legitimate, or uncertain."""
     classification_service = get_classification_service()
     pattern_service = get_pattern_detection_service()
     storage_service = get_storage_service()
@@ -329,102 +507,65 @@ def classification_node(state: State) -> State:
         state["classifications"] = {}
         return state
     
-    classifications = {}
+    # Find the most relevant cluster (should match the one analyzed in pattern_detection_node)
+    # Use the cluster that has pattern analysis (from pattern_detection_node)
+    most_relevant_cluster_id = None
     
-    # Classify each cluster
-    for cluster_id in clusters.keys():
-        try:
-            # Get cluster datapoints
-            cluster_datapoints = storage_service.get_datapoints_by_cluster(cluster_id)
-            
-            if not cluster_datapoints:
-                continue
-            
-            # Get pattern analysis for this cluster (run if not available)
-            pattern_analysis = pattern_analyses.get(cluster_id)
-            if not pattern_analysis:
-                # Run pattern detection for this cluster if not already done
-                pattern_analysis = pattern_service.analyze_cluster(cluster_id)
-            
-            # Classify the cluster (pattern_analysis is required)
-            classification_result = classification_service.classify_cluster(
-                cluster_id=cluster_id,
-                pattern_analysis=pattern_analysis,
-                cluster_datapoints=cluster_datapoints
-            )
-            
-            classifications[cluster_id] = classification_result.model_dump() if hasattr(classification_result, 'model_dump') else classification_result
-            
-        except Exception as e:
-            print(f"Error classifying cluster {cluster_id}: {e}")
-            continue
+    if pattern_analyses:
+        # Use the cluster that was analyzed in pattern_detection_node
+        most_relevant_cluster_id = list(pattern_analyses.keys())[0]
+    else:
+        # Fallback: find cluster with highest relevance_score
+        highest_relevance = -1.0
+        for cluster_id, cluster_data in clusters.items():
+            if isinstance(cluster_data, dict):
+                relevance_score = cluster_data.get("relevance_score", 0.0)
+                if relevance_score > highest_relevance:
+                    highest_relevance = relevance_score
+                    most_relevant_cluster_id = cluster_id
+        
+        # If no relevance_score found, use the first cluster
+        if most_relevant_cluster_id is None:
+            most_relevant_cluster_id = list(clusters.keys())[0] if clusters else None
     
-    state["classifications"] = classifications
-    return state
-
-
-def public_updates_node(state: State) -> State:
-    """Generate user-friendly public updates for clusters relevant to the user's query."""
-    public_update_service = get_public_update_service()
-    storage_service = get_storage_service()
-    clusters = state.get("clusters", {})
-    ingested_results = state.get("ingested_results", [])
-    
-    if not clusters:
-        state["public_updates"] = []
+    if most_relevant_cluster_id is None:
+        logger.warning("No cluster found for classification")
+        state["classifications"] = {}
         return state
     
-    # Get IDs of datapoints ingested in this run (relevant to user's query)
-    ingested_ids = set()
-    if ingested_results:
-        for datapoint in ingested_results:
-            if hasattr(datapoint, 'id'):
-                ingested_ids.add(datapoint.id)
-            elif isinstance(datapoint, dict) and 'id' in datapoint:
-                ingested_ids.add(datapoint['id'])
-    
-    # Filter clusters to only those containing datapoints from this run
-    relevant_cluster_ids = []
-    for cluster_id, cluster_datapoints in clusters.items():
-        # Check if any datapoint in this cluster was ingested in this run
-        cluster_contains_relevant = False
-        for dp in cluster_datapoints:
-            dp_id = dp.get("id") or dp.get("_id")
-            if dp_id and dp_id in ingested_ids:
-                cluster_contains_relevant = True
-                break
+    # Classify only the most relevant cluster
+    classifications = {}
+    try:
+        # Get cluster datapoints
+        cluster_datapoints = storage_service.get_datapoints_by_cluster(most_relevant_cluster_id)
         
-        # Also check by querying the database for this cluster
-        if not cluster_contains_relevant:
-            try:
-                db_cluster_datapoints = storage_service.get_datapoints_by_cluster(cluster_id)
-                for db_dp in db_cluster_datapoints:
-                    db_dp_id = db_dp.get("_id") or db_dp.get("id")
-                    if db_dp_id and db_dp_id in ingested_ids:
-                        cluster_contains_relevant = True
-                        break
-            except Exception as e:
-                print(f"Error checking cluster {cluster_id} relevance: {e}")
+        if not cluster_datapoints:
+            logger.warning(f"No datapoints found for cluster {most_relevant_cluster_id}")
+            state["classifications"] = {}
+            return state
         
-        if cluster_contains_relevant:
-            relevant_cluster_ids.append(cluster_id)
+        # Get pattern analysis for this cluster (should already exist from pattern_detection_node)
+        pattern_analysis = pattern_analyses.get(most_relevant_cluster_id)
+        if not pattern_analysis:
+            # Run pattern detection if not already done
+            logger.warning(f"Pattern analysis not found for {most_relevant_cluster_id}, running pattern detection")
+            pattern_analysis = pattern_service.analyze_cluster(most_relevant_cluster_id)
+        
+        # Classify the cluster (pattern_analysis is required)
+        classification_result = classification_service.classify_cluster(
+            cluster_id=most_relevant_cluster_id,
+            pattern_analysis=pattern_analysis,
+            cluster_datapoints=cluster_datapoints
+        )
+        
+        classifications[most_relevant_cluster_id] = classification_result.model_dump() if hasattr(classification_result, 'model_dump') else classification_result
+        
+        logger.info(f"Classification complete for most relevant cluster: {most_relevant_cluster_id}")
+        
+    except Exception as e:
+        logger.error(f"Error classifying cluster {most_relevant_cluster_id}: {e}", exc_info=True)
     
-    # Only generate updates for relevant clusters
-    public_updates = []
-    for cluster_id in relevant_cluster_ids:
-        try:
-            update = public_update_service.generate_update(
-                cluster_id=cluster_id,
-                use_llm=True
-            )
-            
-            public_updates.append(update.model_dump() if hasattr(update, 'model_dump') else update)
-            
-        except Exception as e:
-            print(f"Error generating update for cluster {cluster_id}: {e}")
-            continue
-    
-    state["public_updates"] = public_updates
+    state["classifications"] = classifications
     return state
 
 
@@ -436,8 +577,6 @@ graph_builder.add_node("ingestion", ingestion_node)
 graph_builder.add_node("clustering", clustering_node)
 graph_builder.add_node("pattern_detection", pattern_detection_node)
 graph_builder.add_node("classification", classification_node)
-graph_builder.add_node("public_updates", public_updates_node)
-graph_builder.add_node("echo", echo_node)
 
 # Define the workflow
 graph_builder.add_edge(START, "planner")
@@ -446,9 +585,7 @@ graph_builder.add_edge("tavily_search", "ingestion")
 graph_builder.add_edge("ingestion", "clustering")
 graph_builder.add_edge("clustering", "pattern_detection")
 graph_builder.add_edge("pattern_detection", "classification")
-graph_builder.add_edge("classification", "public_updates")
-graph_builder.add_edge("public_updates", "echo")
-graph_builder.add_edge("echo", END)
+graph_builder.add_edge("classification", END)
 
 graph = graph_builder.compile()
 
