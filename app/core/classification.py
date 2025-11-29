@@ -157,9 +157,10 @@ class ClassificationService:
                     if url and url not in sources:
                         sources.append(url)
             
+            # Return uncertain classification with low confidence on error
             return ClassificationResult(
                 is_misinformation=False,
-                confidence=0.0,
+                confidence=0.0,  # No confidence when error occurs
                 classification="uncertain",
                 topic_representation="Error: Could not determine topic",
                 evidence_chain=[],
@@ -254,19 +255,56 @@ class ClassificationService:
 
 ## Your Task
 
-Analyze the above pattern detection results and classify this cluster. Consider:
+Analyze the above pattern detection results and classify this cluster. **IMPORTANT: Be balanced and conservative. Do not assume misinformation without strong evidence.**
 
-1. **Rapid Growth**: Misinformation often spreads faster than legitimate news
-2. **Source Credibility**: Low-credibility sources are more likely to spread misinformation
-3. **Contradictions**: Conflicting claims about the same topic indicate misinformation
-4. **Narrative Evolution**: Stories that change significantly over time may be misinformation
-5. **Risk Score**: Higher risk scores indicate higher likelihood of misinformation
+Consider:
+
+1. **Rapid Growth**: 
+   - Legitimate breaking news ALWAYS spreads rapidly (earthquakes, elections, major events, viral stories)
+   - High-quality news outlets often report breaking news very quickly
+   - Rapid growth is NORMAL and EXPECTED for legitimate news
+   - **Do NOT use rapid growth to support misinformation classification**
+   - Only consider it if ALL other indicators strongly suggest misinformation AND growth is extremely unusual (>15x)
+
+2. **Source Credibility**: 
+   - High-credibility sources (BBC, Reuters, AP, etc.) strongly indicate legitimate news
+   - Fact-checkers present is a STRONG indicator of legitimate content
+   - Multiple credible sources reporting the same story suggests legitimacy
+
+3. **Contradictions**: 
+   - Legitimate news can have different perspectives or angles on the same topic
+   - Updates and corrections are normal in developing stories
+   - Only consider contradictions suspicious if they involve clearly false claims
+
+4. **Narrative Evolution**: 
+   - Story updates and corrections are NORMAL in legitimate journalism
+   - Breaking news stories naturally evolve as more information becomes available
+   - Only suspicious if the narrative changes in ways that contradict verified facts
+
+5. **Risk Score**: 
+   - Use risk score as ONE factor, not the sole determinant
+   - Low risk score with credible sources = likely legitimate
+   - High risk score alone is NOT sufficient - need multiple strong indicators
 
 ## Classification Criteria
 
-- **MISINFORMATION**: Clear evidence of false information, multiple red flags, high risk score
-- **LEGITIMATE**: Credible sources, no contradictions, low risk score, fact-checkers present
-- **UNCERTAIN**: Mixed signals, moderate risk, needs human review
+- **MISINFORMATION**: 
+  - REQUIRES clear evidence of false information
+  - Multiple strong red flags (e.g., low credibility + contradictions + high risk)
+  - Claims that contradict verified facts from credible sources
+  - Do NOT classify as misinformation based on rapid growth alone
+  - Do NOT classify as misinformation if credible sources are present
+
+- **LEGITIMATE**: 
+  - Credible sources present (especially fact-checkers)
+  - No major contradictions with verified facts
+  - Story updates are normal and expected
+  - Even with some risk indicators, if credible sources dominate, classify as legitimate
+
+- **UNCERTAIN**: 
+  - Mixed signals with no clear evidence either way
+  - Moderate risk but insufficient evidence
+  - When in doubt, choose UNCERTAIN rather than MISINFORMATION
 
 ## Output Format
 
@@ -315,28 +353,113 @@ The "topic_representation" field should:
 
 ## Important Guidelines
 
-1. **Confidence Scoring**:
-   - 0.9-1.0: Very high confidence (clear misinformation or clearly legitimate)
-   - 0.7-0.9: High confidence (strong evidence)
-   - 0.5-0.7: Moderate confidence (mixed signals)
-   - 0.3-0.5: Low confidence (uncertain)
-   - 0.0-0.3: Very low confidence (insufficient data)
+1. **Confidence Scoring** (CRITICAL - Must be accurate and align with classification):
+   - **0.9-1.0**: Very high confidence - Use ONLY when you are VERY CERTAIN
+     - For "misinformation": Clear, undeniable false claims with multiple strong indicators
+     - For "legitimate": Multiple credible sources, fact-checkers present, no contradictions
+   - **0.7-0.9**: High confidence - Strong evidence supports your classification
+     - For "misinformation": Strong indicators present, credible sources absent
+     - For "legitimate": Credible sources dominate, minimal risk indicators
+   - **0.5-0.7**: Moderate confidence - Some evidence but mixed signals
+     - Use for "legitimate" when credible sources present but some risk indicators exist
+     - Use for "uncertain" when signals are truly mixed
+   - **0.3-0.5**: Low confidence - Weak evidence, high uncertainty
+     - Use for "uncertain" classification when evidence is insufficient
+     - Use for "legitimate" when credible sources are present but evidence is limited
+   - **0.0-0.3**: Very low confidence - Insufficient data
+     - Use ONLY for "uncertain" classification
+   
+   **IMPORTANT RULES**:
+   - If classification is "legitimate", confidence should be >= 0.5 (at least moderate)
+   - If classification is "misinformation", confidence should be >= 0.3 (at least low)
+   - If classification is "uncertain", confidence should be <= 0.6 (at most moderate)
+   - Confidence MUST reflect how certain you are about the classification
+   - High confidence (>=0.7) requires strong, clear evidence
+   - Low confidence (<0.5) should typically result in "uncertain" classification
 
 2. **Evidence Chain**: Build a logical chain showing how you reached your conclusion
    - Start with strongest evidence
    - Each step should build on previous steps
    - Weight each piece of evidence (0.0-1.0)
+   - **Give more weight to credible sources and fact-checkers**
 
-3. **Be Conservative**: When uncertain, classify as "uncertain" rather than guessing
+3. **Be VERY Conservative**: 
+   - **Default to "legitimate" or "uncertain" unless there is STRONG evidence of misinformation**
+   - When uncertain, classify as "uncertain" or "legitimate" rather than "misinformation"
+   - **Do NOT classify as misinformation based on risk score alone**
+   - **Presence of credible sources should strongly favor "legitimate" classification**
 
 4. **Consider Context**: 
-   - Legitimate breaking news can have rapid growth
-   - Contradictions might indicate legitimate debate
-   - Narrative evolution might be legitimate story updates
+   - Legitimate breaking news can have rapid growth - this is NORMAL
+   - Different perspectives or angles are NORMAL in legitimate journalism
+   - Story updates and corrections are EXPECTED in developing stories
+   - Fact-checkers present is a STRONG indicator of legitimate content
+   - Multiple credible sources reporting the same story suggests legitimacy
+
+5. **Bias Against Misinformation Classification**:
+   - **Require multiple strong indicators before classifying as misinformation**
+   - **If credible sources are present, strongly favor "legitimate"**
+   - **Rapid growth + credible sources = likely legitimate breaking news**
+   - **Only classify as misinformation if there is clear evidence of false claims**
 
 Now analyze the cluster and provide your classification in the JSON format above.
 """
         return prompt
+    
+    def _validate_classification_result(self, result: ClassificationResult) -> ClassificationResult:
+        """
+        Validate and ensure consistency of classification result.
+        
+        Ensures:
+        - Confidence is in valid range [0.0, 1.0]
+        - Classification and is_misinformation are consistent
+        - Confidence aligns with classification
+        """
+        # Ensure confidence is in valid range
+        confidence = max(0.0, min(1.0, result.confidence))
+        confidence = round(confidence, 3)
+        
+        # Ensure classification and is_misinformation are consistent
+        classification = result.classification.lower()
+        is_misinformation = result.is_misinformation
+        
+        if classification == "misinformation":
+            is_misinformation = True
+        elif classification == "legitimate":
+            is_misinformation = False
+        elif classification == "uncertain":
+            is_misinformation = False
+        else:
+            # If classification is invalid, infer from is_misinformation
+            if is_misinformation:
+                classification = "misinformation"
+            else:
+                classification = "uncertain"
+        
+        # Ensure confidence aligns with classification
+        if classification == "uncertain":
+            # For uncertain, cap confidence at 0.6 (moderate)
+            confidence = min(confidence, 0.6)
+        elif classification == "legitimate":
+            # For legitimate, ensure confidence is at least 0.5 (moderate)
+            confidence = max(0.5, confidence)
+        elif classification == "misinformation":
+            # For misinformation, ensure confidence is at least 0.3 (low)
+            confidence = max(0.3, confidence)
+        
+        # Create validated result
+        return ClassificationResult(
+            is_misinformation=is_misinformation,
+            confidence=confidence,
+            classification=classification,
+            topic_representation=result.topic_representation,
+            evidence_chain=result.evidence_chain,
+            key_indicators=result.key_indicators,
+            reasoning=result.reasoning,
+            supporting_evidence=result.supporting_evidence,
+            contradictory_evidence=result.contradictory_evidence,
+            sources=result.sources
+        )
     
     def _parse_llm_response(self, content: str) -> ClassificationResult:
         """
@@ -402,11 +525,55 @@ Now analyze the cluster and provide your classification in the JSON format above
             try:
                 data = json.loads(json_str)
                 
+                # Extract and validate classification
+                classification = data.get("classification", "uncertain").lower()
+                is_misinformation = data.get("is_misinformation", False)
+                
+                # Ensure classification and is_misinformation are consistent
+                if classification == "misinformation":
+                    is_misinformation = True
+                elif classification == "legitimate":
+                    is_misinformation = False
+                elif classification == "uncertain":
+                    is_misinformation = False
+                else:
+                    # If classification doesn't match, use is_misinformation
+                    if is_misinformation:
+                        classification = "misinformation"
+                    else:
+                        classification = "uncertain"
+                
+                # Extract and validate confidence
+                raw_confidence = data.get("confidence", 0.0)
+                try:
+                    confidence = float(raw_confidence)
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid confidence value: {raw_confidence}, defaulting to 0.5")
+                    confidence = 0.5
+                
+                # Clamp confidence to valid range [0.0, 1.0]
+                confidence = max(0.0, min(1.0, confidence))
+                
+                # Ensure confidence aligns with classification
+                # If classified as "legitimate" with high confidence, confidence should reflect that
+                # If classified as "misinformation" with high confidence, confidence should reflect that
+                # If classified as "uncertain", confidence should be moderate to low
+                if classification == "uncertain":
+                    # For uncertain, cap confidence at 0.6 (moderate)
+                    confidence = min(confidence, 0.6)
+                elif classification == "legitimate" and confidence < 0.5:
+                    # If legitimate but low confidence, boost it slightly (at least 0.5)
+                    confidence = max(0.5, confidence)
+                elif classification == "misinformation" and confidence < 0.5:
+                    # If misinformation but low confidence, it's suspicious - keep it low
+                    # But ensure it's at least 0.3 if classified as misinformation
+                    confidence = max(0.3, confidence)
+                
                 # Validate and create result
-                return ClassificationResult(
-                    is_misinformation=data.get("is_misinformation", False),
-                    confidence=float(data.get("confidence", 0.0)),
-                    classification=data.get("classification", "uncertain"),
+                result = ClassificationResult(
+                    is_misinformation=is_misinformation,
+                    confidence=round(confidence, 3),  # Round to 3 decimal places
+                    classification=classification,
                     topic_representation=data.get("topic_representation", "Topic not specified"),
                     evidence_chain=data.get("evidence_chain", []),
                     key_indicators=data.get("key_indicators", []),
@@ -415,6 +582,19 @@ Now analyze the cluster and provide your classification in the JSON format above
                     contradictory_evidence=data.get("contradictory_evidence", []),
                     sources=data.get("sources", [])  # Sources will be populated from cluster_datapoints
                 )
+                
+                # Final validation: ensure consistency
+                result = self._validate_classification_result(result)
+                
+                # Log if confidence seems inconsistent (after validation)
+                if result.classification == "legitimate" and result.confidence < 0.5:
+                    logger.warning(f"Low confidence ({result.confidence}) for legitimate classification - may indicate uncertainty")
+                elif result.classification == "misinformation" and result.confidence > 0.8:
+                    logger.info(f"High confidence ({result.confidence}) for misinformation classification")
+                elif result.classification == "uncertain" and result.confidence > 0.7:
+                    logger.warning(f"High confidence ({result.confidence}) for uncertain classification - may need review")
+                
+                return result
             except json.JSONDecodeError as e:
                 logger.warning(f"Failed to parse extracted JSON: {e}")
                 logger.debug(f"Extracted JSON string: {json_str[:500]}")
@@ -438,7 +618,7 @@ Now analyze the cluster and provide your classification in the JSON format above
             is_misinformation = False
         
         # Try to extract confidence (look for numbers 0-1 or percentages)
-        confidence = 0.5  # Default moderate confidence
+        confidence = 0.5  # Default moderate confidence for fallback parsing
         import re
         confidence_matches = re.findall(r'(?:confidence|score)[:\s]+([0-9.]+)', content_lower)
         if confidence_matches:
@@ -451,7 +631,24 @@ Now analyze the cluster and provide your classification in the JSON format above
             except ValueError:
                 pass
         
-        classification = "misinformation" if is_misinformation else "uncertain"
+        # Clamp confidence to valid range
+        confidence = max(0.0, min(1.0, confidence))
+        
+        # Determine classification from extracted information
+        if is_misinformation:
+            classification = "misinformation"
+            # If classified as misinformation, ensure confidence is at least 0.3
+            confidence = max(0.3, confidence)
+        elif "legitimate" in content_lower or "not misinformation" in content_lower:
+            classification = "legitimate"
+            is_misinformation = False
+            # If legitimate, ensure confidence is at least 0.5
+            confidence = max(0.5, confidence)
+        else:
+            classification = "uncertain"
+            is_misinformation = False
+            # For uncertain, cap confidence at 0.6
+            confidence = min(0.6, confidence)
         
         # Try to extract topic representation from text
         topic_representation = "Topic not specified"
@@ -470,7 +667,11 @@ Now analyze the cluster and provide your classification in the JSON format above
                     topic_representation = topic_representation[:200] + "..."
                 break
         
-        return ClassificationResult(
+        # Round confidence to 3 decimal places
+        confidence = round(max(0.0, min(1.0, confidence)), 3)
+        
+        # Create result and validate it
+        result = ClassificationResult(
             is_misinformation=is_misinformation,
             confidence=confidence,
             classification=classification,
@@ -487,4 +688,7 @@ Now analyze the cluster and provide your classification in the JSON format above
             contradictory_evidence=[],
             sources=[]  # Sources will be populated from cluster_datapoints
         )
+        
+        # Validate the result
+        return self._validate_classification_result(result)
 

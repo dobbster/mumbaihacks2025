@@ -191,18 +191,28 @@ class PatternDetectionService:
         datapoints_per_hour = len(datapoints_with_time) / time_span_hours
         
         # Determine if rapid growth
+        # Only flag as suspicious if growth is EXTREMELY unusual 
         is_rapid_growth = (
-            growth_rate >= self.rapid_growth_threshold and 
-            current_size >= 3  # At least 3 datapoints in recent window
+            growth_rate >= 10.0 and  # Very high threshold (10x growth)
+            current_size >= 10  # At least 10 datapoints in recent window
         )
         
-        # Calculate risk score (0-1)
-        # Higher risk if: high growth rate, high datapoints/hour, large cluster
-        risk_score = min(1.0, (
-            (min(growth_rate, 10) / 10) * 0.4 +  # Growth rate component (40%)
-            (min(datapoints_per_hour, 10) / 10) * 0.3 +  # Velocity component (30%)
-            (min(len(cluster_datapoints), 50) / 50) * 0.3  # Size component (30%)
-        ))
+        # Calculate risk score (0-1) - Minimal impact
+        # Rapid growth alone is NOT a strong indicator of misinformation
+        # Legitimate breaking news (earthquakes, elections, major events) can grow very rapidly
+        growth_component = 0.0
+        # Only contribute to risk if growth is EXTREMELY unusual (>10x)
+        if growth_rate > 15.0:  # Only penalize if growth is >15x (extremely unusual)
+            growth_component = min(1.0, (growth_rate - 15.0) / 20.0) * 0.1  # Minimal weight (10% max
+        
+        velocity_component = 0.0
+        # Only penalize if velocity is EXTREMELY high (>20 per hour)
+        if datapoints_per_hour > 20.0:
+            velocity_component = min(1.0, (datapoints_per_hour - 20.0) / 30.0) * 0.05  # Very minimal weight
+        
+        # Rapid growth contributes minimally to overall risk
+        # Most legitimate breaking news will have rapid growth
+        risk_score = min(0.2, growth_component + velocity_component)  # Cap at 0.2 max
         
         return {
             "is_rapid_growth": is_rapid_growth,
@@ -282,19 +292,27 @@ class PatternDetectionService:
         credible_ratio = credible_count / total_sources if total_sources > 0 else 0.0
         source_diversity = len(source_counts)
         
-        # Calculate risk score
-        # Higher risk if: low credible ratio, many questionable sources, low diversity
-        risk_score = (
-            (1 - credible_ratio) * 0.5 +  # Low credibility component (50%)
-            (min(questionable_count / max(total_sources, 1), 1.0)) * 0.3 +  # Questionable sources (30%)
-            (1 - min(source_diversity / 10, 1.0)) * 0.2  # Low diversity (20%)
-        )
-        
-        # Check if fact-checkers are present (good sign)
+        # Check if fact-checkers are present (good sign) - DO THIS FIRST
         fact_checkers_present = any(
             source in FACT_CHECK_SOURCES 
             for source in source_counts.keys()
         )
+        
+        # Calculate risk score - More balanced, give credit to credible sources
+        # Higher risk if: very low credible ratio, many questionable sources
+        # Lower risk if: fact-checkers present, high credible ratio
+        base_risk = (1 - credible_ratio) * 0.4  # Reduced weight (50% -> 40%)
+        questionable_risk = (min(questionable_count / max(total_sources, 1), 1.0)) * 0.3
+        
+        # Give credit for fact-checkers and high credibility
+        credibility_bonus = 0.0
+        if fact_checkers_present:
+            credibility_bonus = -0.2  # Reduce risk if fact-checkers present
+        if credible_ratio >= 0.5:  # If majority are credible, reduce risk
+            credibility_bonus = max(credibility_bonus, -0.15)
+        
+        # Diversity is less important - remove it from risk calculation
+        risk_score = max(0.0, min(1.0, base_risk + questionable_risk + credibility_bonus))
         
         return {
             "credible_sources": sorted(list(credible_sources)),
@@ -448,8 +466,18 @@ class PatternDetectionService:
         
         has_contradictions = len(unique_pairs) > 0
         
-        # Calculate risk score
-        risk_score = min(1.0, len(unique_pairs) / max(len(cluster_datapoints), 1))
+        # Calculate risk score - More conservative
+        # Legitimate news can have different perspectives/updates
+        # Only penalize if there are MANY contradictions relative to cluster size
+        if len(unique_pairs) == 0:
+            risk_score = 0.0
+        else:
+            # Only count as high risk if contradictions are >20% of datapoints
+            contradiction_ratio = len(unique_pairs) / max(len(cluster_datapoints), 1)
+            if contradiction_ratio > 0.2:  # More than 20% are contradictions
+                risk_score = min(1.0, (contradiction_ratio - 0.2) / 0.8)  # Scale from 0.2 to 1.0
+            else:
+                risk_score = contradiction_ratio * 0.5  # Low risk for few contradictions
         
         # Sample contradictions for display
         sample_contradictions = [
@@ -571,13 +599,18 @@ class PatternDetectionService:
         
         has_evolution = len(key_changes) > 0
         
-        # Calculate risk score
-        # Higher risk if: many evolution stages, significant changes, rapid timeline
-        risk_score = min(1.0, (
-            (len(key_changes) / max(len(time_windows), 1)) * 0.5 +  # Change frequency (50%)
-            (min(len(evolution_stages), 5) / 5) * 0.3 +  # Number of stages (30%)
-            (1 if has_evolution else 0) * 0.2  # Has evolution (20%)
-        ))
+        # Calculate risk score - More conservative
+        # Story updates are normal in legitimate news
+        # Only penalize if there are MANY significant changes
+        if not has_evolution:
+            risk_score = 0.0
+        else:
+            # Only high risk if changes are frequent (>50% of windows have changes)
+            change_frequency = len(key_changes) / max(len(time_windows), 1)
+            if change_frequency > 0.5:  # More than 50% of windows have changes
+                risk_score = min(1.0, (change_frequency - 0.5) / 0.5) * 0.6  # Scale and reduce max
+            else:
+                risk_score = change_frequency * 0.3  # Low risk for occasional updates
         
         return {
             "has_evolution": has_evolution,
@@ -620,29 +653,35 @@ class PatternDetectionService:
         evolution_analysis = self.track_narrative_evolution(cluster_id)
         
         # Calculate overall risk score
-        risk_scores = [
-            growth_analysis.get("risk_score", 0.0),
-            credibility_analysis.get("risk_score", 0.0),
-            contradiction_analysis.get("risk_score", 0.0),
-            evolution_analysis.get("risk_score", 0.0)
-        ]
+        # Give rapid growth minimal weight (10%) since it's common in legitimate news
+        # Focus on credibility, contradictions, and evolution as stronger indicators
+        growth_risk = growth_analysis.get("risk_score", 0.0)
+        credibility_risk = credibility_analysis.get("risk_score", 0.0)
+        contradiction_risk = contradiction_analysis.get("risk_score", 0.0)
+        evolution_risk = evolution_analysis.get("risk_score", 0.0)
         
-        overall_risk_score = np.mean(risk_scores) if risk_scores else 0.0
+        # Weighted average: rapid growth gets only 10% weight
+        overall_risk_score = (
+            growth_risk * 0.1 +  # Rapid growth: 10% (minimal impact)
+            credibility_risk * 0.4 +  # Source credibility: 40% (strong indicator)
+            contradiction_risk * 0.3 +  # Contradictions: 30% (strong indicator)
+            evolution_risk * 0.2  # Narrative evolution: 20% (moderate indicator)
+        )
         
-        # Determine risk level
-        if overall_risk_score >= 0.7:
+        # Determine risk level - Adjusted thresholds to be more conservative
+        if overall_risk_score >= 0.6:  # Raised from 0.7
             risk_level = "high"
-        elif overall_risk_score >= 0.4:
+        elif overall_risk_score >= 0.35:  # Raised from 0.4
             risk_level = "medium"
         else:
             risk_level = "low"
         
-        # Flags for quick assessment
+        # Flags for quick assessment - More conservative thresholds
         flags = {
             "rapid_growth": growth_analysis.get("is_rapid_growth", False),
-            "low_credibility": credibility_analysis.get("credible_ratio", 1.0) < self.min_credible_source_ratio,
-            "has_contradictions": contradiction_analysis.get("has_contradictions", False),
-            "narrative_evolution": evolution_analysis.get("has_evolution", False)
+            "low_credibility": credibility_analysis.get("credible_ratio", 1.0) < (self.min_credible_source_ratio * 0.7),  # Lower threshold (was 0.3, now 0.21)
+            "has_contradictions": contradiction_analysis.get("has_contradictions", False) and contradiction_analysis.get("contradiction_count", 0) > 2,  # Require multiple contradictions
+            "narrative_evolution": evolution_analysis.get("has_evolution", False) and evolution_analysis.get("change_count", 0) > 2  # Require multiple changes
         }
         
         # Count flags
