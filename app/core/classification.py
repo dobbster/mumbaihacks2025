@@ -24,6 +24,7 @@ class ClassificationResult(BaseModel):
     is_misinformation: bool = Field(description="Whether the cluster contains misinformation")
     confidence: float = Field(description="Confidence score (0.0 to 1.0)")
     classification: str = Field(description="Classification: 'misinformation', 'legitimate', or 'uncertain'")
+    topic_representation: str = Field(description="Concise human-readable description of what this cluster is about")
     evidence_chain: List[Dict[str, Any]] = Field(description="Chain of evidence supporting the classification")
     key_indicators: List[str] = Field(description="Key indicators that led to this classification")
     reasoning: str = Field(description="Detailed reasoning for the classification")
@@ -139,6 +140,7 @@ class ClassificationService:
                 is_misinformation=False,
                 confidence=0.0,
                 classification="uncertain",
+                topic_representation="Error: Could not determine topic",
                 evidence_chain=[],
                 key_indicators=[f"Error during classification: {str(e)}"],
                 reasoning=f"Failed to classify due to error: {str(e)}",
@@ -253,6 +255,7 @@ Respond with a JSON object in this exact format:
     "is_misinformation": true/false,
     "confidence": 0.0-1.0,
     "classification": "misinformation" | "legitimate" | "uncertain",
+    "topic_representation": "A concise, human-readable description (1-2 sentences) of what this cluster is about, e.g., 'Climate change denial claims about rising sea levels' or 'Breaking news about a natural disaster in India'",
     "evidence_chain": [
         {{
             "step": 1,
@@ -274,6 +277,19 @@ Respond with a JSON object in this exact format:
     ]
 }}
 ```
+
+## Topic Representation Guidelines
+
+The "topic_representation" field should:
+- Be concise (1-2 sentences maximum)
+- Clearly describe the main topic/subject of the cluster
+- Use plain, human-readable language
+- Focus on WHAT the cluster is about, not the classification result
+- Examples:
+  - "Claims about vaccine side effects and safety concerns"
+  - "News coverage of a recent earthquake in Mumbai"
+  - "Social media posts questioning election results"
+  - "Articles discussing climate change and global warming"
 
 ## Important Guidelines
 
@@ -369,6 +385,7 @@ Now analyze the cluster and provide your classification in the JSON format above
                     is_misinformation=data.get("is_misinformation", False),
                     confidence=float(data.get("confidence", 0.0)),
                     classification=data.get("classification", "uncertain"),
+                    topic_representation=data.get("topic_representation", "Topic not specified"),
                     evidence_chain=data.get("evidence_chain", []),
                     key_indicators=data.get("key_indicators", []),
                     reasoning=data.get("reasoning", "No reasoning provided"),
@@ -413,10 +430,28 @@ Now analyze the cluster and provide your classification in the JSON format above
         
         classification = "misinformation" if is_misinformation else "uncertain"
         
+        # Try to extract topic representation from text
+        topic_representation = "Topic not specified"
+        # Look for patterns like "topic:", "about:", "cluster is about", etc.
+        topic_patterns = [
+            r'topic[:\s]+(.+?)(?:\.|$|evidence|classification)',
+            r'about[:\s]+(.+?)(?:\.|$|evidence|classification)',
+            r'cluster is about (.+?)(?:\.|$|evidence|classification)',
+            r'subject[:\s]+(.+?)(?:\.|$|evidence|classification)'
+        ]
+        for pattern in topic_patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                topic_representation = match.group(1).strip()
+                if len(topic_representation) > 200:
+                    topic_representation = topic_representation[:200] + "..."
+                break
+        
         return ClassificationResult(
             is_misinformation=is_misinformation,
             confidence=confidence,
             classification=classification,
+            topic_representation=topic_representation,
             evidence_chain=[{
                 "step": 1,
                 "evidence": "Parsed from text response (JSON parsing failed)",

@@ -256,6 +256,61 @@ class ClusteringService:
         logger.info(f"Created {len(clusters)} clusters from {len(datapoints)} datapoints")
         return clusters
     
+    def cluster_datapoints_by_ids(
+        self,
+        datapoint_ids: List[str],
+        min_cluster_size: Optional[int] = None,
+        use_dbscan: bool = True,
+        include_context: bool = True,
+        context_hours: int = 168
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Cluster specific datapoints by their IDs, optionally including context from recent datapoints.
+        
+        Args:
+            datapoint_ids: List of datapoint IDs to cluster
+            min_cluster_size: Override min_samples for DBSCAN
+            use_dbscan: Use DBSCAN (True) or simple similarity (False)
+            include_context: If True, include other recent datapoints for better clustering context
+            context_hours: Hours to look back for context datapoints
+            
+        Returns:
+            Dictionary mapping cluster_id to list of datapoints
+        """
+        # Fetch datapoints by IDs
+        target_datapoints = []
+        for dp_id in datapoint_ids:
+            dp = self.storage_service.get_datapoint(dp_id)
+            if dp and dp.get("embedding"):
+                target_datapoints.append(dp)
+        
+        if not target_datapoints:
+            logger.warning(f"No datapoints found for IDs: {datapoint_ids}")
+            return {}
+        
+        logger.info(f"Clustering {len(target_datapoints)} target datapoints")
+        
+        # Optionally include context datapoints for better clustering
+        if include_context:
+            context_datapoints = self.storage_service.get_recent_datapoints(hours=context_hours)
+            # Filter to only include datapoints with embeddings
+            context_datapoints = [dp for dp in context_datapoints if dp.get("embedding")]
+            
+            # Combine target and context, avoiding duplicates
+            target_ids = {dp.get("_id") or dp.get("id") for dp in target_datapoints}
+            context_datapoints = [dp for dp in context_datapoints if (dp.get("_id") or dp.get("id")) not in target_ids]
+            
+            all_datapoints = target_datapoints + context_datapoints
+            logger.info(f"Including {len(context_datapoints)} context datapoints (total: {len(all_datapoints)})")
+        else:
+            all_datapoints = target_datapoints
+        
+        if use_dbscan:
+            return self.cluster_datapoints(all_datapoints, min_cluster_size)
+        else:
+            min_size = min_cluster_size if min_cluster_size else 2
+            return self.cluster_datapoints_simple(all_datapoints, min_cluster_size=min_size)
+    
     def cluster_recent_datapoints(
         self,
         hours: int = 168,  # Default to 7 days to catch more datapoints

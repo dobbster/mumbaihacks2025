@@ -2,6 +2,7 @@
 
 from typing import Annotated, Optional, Dict, Any, List
 import os
+import logging
 from dotenv import load_dotenv
 import requests
 from tavily import TavilyClient
@@ -19,10 +20,11 @@ from app.dependencies import (
     get_clustering_service,
     get_pattern_detection_service,
     get_classification_service,
-    get_verification_service,
     get_public_update_service,
     get_storage_service
 )
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
@@ -83,7 +85,6 @@ class State(TypedDict):
     clustering_stats: Optional[Dict[str, Any]]
     pattern_analyses: Optional[Dict[str, Dict[str, Any]]]
     classifications: Optional[Dict[str, Any]]
-    verifications: Optional[Dict[str, Any]]
     public_updates: Optional[List[Dict[str, Any]]]
 
 
@@ -117,20 +118,31 @@ def planner_node(state: State) -> State:
 def tavily_search_node(state: State) -> State:
     """Fetch results from Tavily using queries and format them for the API response."""
     import datetime
+    import hashlib
     queries = state.get("queries", [])
     formatted_results = []
     for idx, q in enumerate(queries):
         try:
             response = tavily_client.search(query=q, num_results=3)
             for i, res in enumerate(response.get("results", [])):
+                # Generate unique ID based on URL (if available) or fallback to deterministic ID
+                article_url = res.get("url")
+                if article_url:
+                    # Use URL hash for unique, deterministic ID
+                    url_hash = hashlib.md5(article_url.encode()).hexdigest()[:8]
+                    datapoint_id = f"tavily_{url_hash}"
+                else:
+                    # Fallback to query-based ID if no URL
+                    datapoint_id = f"tavily_{idx}_{i}_{int(datetime.datetime.utcnow().timestamp())}"
+                
                 formatted_results.append({
-                    "id": f"tavily_{idx}_{i}",
+                    "id": datapoint_id,
                     "source_type": "tavily",
                     "source_name": "Tavily Search",
                     "source_url": "https://api.tavily.com",
                     "title": res.get("title"),
                     "content": res.get("content"),
-                    "url": res.get("url"),
+                    "url": article_url,
                     "published_at": res.get("published_at",datetime.datetime.utcnow().isoformat() + "Z"),
                     "author": res.get("author"),
                     "categories": res.get("categories", []),
@@ -139,8 +151,10 @@ def tavily_search_node(state: State) -> State:
                     "ingested_at": datetime.datetime.utcnow().isoformat() + "Z"
                 })
         except Exception as e:
+            # For errors, use timestamp-based ID to ensure uniqueness
+            error_id = f"tavily_{idx}_error_{int(datetime.datetime.utcnow().timestamp() * 1000000)}"
             formatted_results.append({
-                "id": f"tavily_{idx}_error",
+                "id": error_id,
                 "source_type": "tavily",
                 "source_name": "Tavily Search",
                 "source_url": "https://api.tavily.com",
@@ -175,31 +189,76 @@ def ingestion_node(state: State) -> State:
             continue
     # Ingest datapoints (vectorize and store)
     stats = ingestion_service.ingest_datapoints(datapoints)
-    state["ingested_results"] = datapoints
+    
+    # Combine newly ingested datapoints with retrieved duplicates
+    all_datapoints = datapoints.copy()
+    
+    # Add retrieved duplicates from MongoDB (if any)
+    retrieved_duplicates = stats.get("retrieved_duplicates_list", [])
+    if retrieved_duplicates:
+        for dup_dict in retrieved_duplicates:
+            try:
+                dup_datapoint = DataPoint(**dup_dict)
+                all_datapoints.append(dup_datapoint)
+            except Exception as e:
+                print(f"Error converting retrieved duplicate to DataPoint: {e}")
+                continue
+    
+    state["ingested_results"] = all_datapoints
     state["ingestion_stats"] = stats
     return state
 
 
 def clustering_node(state: State) -> State:
-    """Cluster recent datapoints into topic groups using DBSCAN."""
+    """Cluster datapoints from ingested_results into topic groups using DBSCAN."""
     clustering_service = get_clustering_service()
+    storage_service = get_storage_service()
     
-    # Cluster recent datapoints (default: last 7 days, min cluster size 2)
-    hours = 168  # 7 days
-    min_cluster_size = 2
-    eps = 0.30  # DBSCAN parameter
+    # Get datapoints from current ingestion run (includes new + retrieved duplicates)
+    ingested_results = state.get("ingested_results", [])
     
-    # Update clustering service parameters
-    clustering_service.eps = eps
-    clustering_service.min_samples = min_cluster_size
-    
-    # Run clustering
-    clusters = clustering_service.cluster_recent_datapoints(
-        hours=hours,
-        min_cluster_size=min_cluster_size,
-        use_dbscan=True,
-        force_recluster=False
-    )
+    if not ingested_results:
+        logger.warning("No ingested results found in state, falling back to recent datapoints")
+        # Fallback to recent datapoints if no ingested results
+        hours = 168
+        min_cluster_size = 2
+        eps = 0.30
+        
+        clustering_service.eps = eps
+        clustering_service.min_samples = min_cluster_size
+        
+        clusters = clustering_service.cluster_recent_datapoints(
+            hours=hours,
+            min_cluster_size=min_cluster_size,
+            use_dbscan=True,
+            force_recluster=False
+        )
+    else:
+        # Extract datapoint IDs from ingested_results
+        datapoint_ids = [dp.id for dp in ingested_results if hasattr(dp, 'id') and dp.id]
+        
+        if not datapoint_ids:
+            logger.warning("No valid datapoint IDs found in ingested_results")
+            state["clusters"] = {}
+            state["clustering_stats"] = {"clusters_found": 0, "total_datapoints": 0}
+            return state
+        
+        logger.info(f"Clustering {len(datapoint_ids)} datapoints from ingested_results")
+        
+        # Update clustering service parameters
+        min_cluster_size = 2
+        eps = 0.30
+        clustering_service.eps = eps
+        clustering_service.min_samples = min_cluster_size
+        
+        # Cluster specific datapoints by IDs, including context from recent datapoints
+        clusters = clustering_service.cluster_datapoints_by_ids(
+            datapoint_ids=datapoint_ids,
+            min_cluster_size=min_cluster_size,
+            use_dbscan=True,
+            include_context=True,  # Include other recent datapoints for better clustering
+            context_hours=168  # 7 days of context
+        )
     
     # Get statistics
     stats = clustering_service.get_cluster_statistics(clusters)
@@ -231,21 +290,29 @@ def clustering_node(state: State) -> State:
 def pattern_detection_node(state: State) -> State:
     """Analyze clusters for misinformation patterns."""
     pattern_service = get_pattern_detection_service()
+    storage_service = get_storage_service()
     clusters = state.get("clusters", {})
     
     if not clusters:
+        logger.info("No clusters found in state, skipping pattern detection")
         state["pattern_analyses"] = {}
         return state
     
-    # Analyze all clusters
-    hours = 168
-    min_cluster_size = 2
-    results = pattern_service.analyze_all_clusters(
-        hours=hours,
-        min_cluster_size=min_cluster_size
-    )
+    # Analyze each cluster from state
+    analyses = {}
+    for cluster_id in clusters.keys():
+        try:
+            analysis = pattern_service.analyze_cluster(cluster_id)
+            analyses[cluster_id] = analysis
+        except Exception as e:
+            logger.error(f"Error analyzing cluster {cluster_id}: {e}", exc_info=True)
+            analyses[cluster_id] = {
+                "cluster_id": cluster_id,
+                "error": str(e)
+            }
     
-    state["pattern_analyses"] = results.get("analyses", {})
+    logger.info(f"Pattern detection complete: analyzed {len(analyses)} clusters")
+    state["pattern_analyses"] = analyses
     return state
 
 
@@ -296,56 +363,55 @@ def classification_node(state: State) -> State:
     return state
 
 
-def verification_node(state: State) -> State:
-    """Verify clusters through fact-checking and cross-referencing."""
-    verification_service = get_verification_service()
-    classification_service = get_classification_service()
-    storage_service = get_storage_service()
-    
-    clusters = state.get("clusters", {})
-    classifications = state.get("classifications", {})
-    
-    if not clusters:
-        state["verifications"] = {}
-        return state
-    
-    verifications = {}
-    
-    # Verify each cluster
-    for cluster_id in clusters.keys():
-        try:
-            # Get classification result for this cluster
-            classification_result = classifications.get(cluster_id, {})
-            
-            # Verify the cluster
-            verification_result = verification_service.verify_cluster(
-                cluster_id=cluster_id,
-                classification_result=classification_result
-            )
-            
-            verifications[cluster_id] = verification_result.model_dump() if hasattr(verification_result, 'model_dump') else verification_result
-            
-        except Exception as e:
-            print(f"Error verifying cluster {cluster_id}: {e}")
-            continue
-    
-    state["verifications"] = verifications
-    return state
-
-
 def public_updates_node(state: State) -> State:
-    """Generate user-friendly public updates for clusters."""
+    """Generate user-friendly public updates for clusters relevant to the user's query."""
     public_update_service = get_public_update_service()
+    storage_service = get_storage_service()
     clusters = state.get("clusters", {})
+    ingested_results = state.get("ingested_results", [])
     
     if not clusters:
         state["public_updates"] = []
         return state
     
-    public_updates = []
+    # Get IDs of datapoints ingested in this run (relevant to user's query)
+    ingested_ids = set()
+    if ingested_results:
+        for datapoint in ingested_results:
+            if hasattr(datapoint, 'id'):
+                ingested_ids.add(datapoint.id)
+            elif isinstance(datapoint, dict) and 'id' in datapoint:
+                ingested_ids.add(datapoint['id'])
     
-    # Generate update for each cluster
-    for cluster_id in clusters.keys():
+    # Filter clusters to only those containing datapoints from this run
+    relevant_cluster_ids = []
+    for cluster_id, cluster_datapoints in clusters.items():
+        # Check if any datapoint in this cluster was ingested in this run
+        cluster_contains_relevant = False
+        for dp in cluster_datapoints:
+            dp_id = dp.get("id") or dp.get("_id")
+            if dp_id and dp_id in ingested_ids:
+                cluster_contains_relevant = True
+                break
+        
+        # Also check by querying the database for this cluster
+        if not cluster_contains_relevant:
+            try:
+                db_cluster_datapoints = storage_service.get_datapoints_by_cluster(cluster_id)
+                for db_dp in db_cluster_datapoints:
+                    db_dp_id = db_dp.get("_id") or db_dp.get("id")
+                    if db_dp_id and db_dp_id in ingested_ids:
+                        cluster_contains_relevant = True
+                        break
+            except Exception as e:
+                print(f"Error checking cluster {cluster_id} relevance: {e}")
+        
+        if cluster_contains_relevant:
+            relevant_cluster_ids.append(cluster_id)
+    
+    # Only generate updates for relevant clusters
+    public_updates = []
+    for cluster_id in relevant_cluster_ids:
         try:
             update = public_update_service.generate_update(
                 cluster_id=cluster_id,
@@ -370,7 +436,6 @@ graph_builder.add_node("ingestion", ingestion_node)
 graph_builder.add_node("clustering", clustering_node)
 graph_builder.add_node("pattern_detection", pattern_detection_node)
 graph_builder.add_node("classification", classification_node)
-graph_builder.add_node("verification", verification_node)
 graph_builder.add_node("public_updates", public_updates_node)
 graph_builder.add_node("echo", echo_node)
 
@@ -381,8 +446,7 @@ graph_builder.add_edge("tavily_search", "ingestion")
 graph_builder.add_edge("ingestion", "clustering")
 graph_builder.add_edge("clustering", "pattern_detection")
 graph_builder.add_edge("pattern_detection", "classification")
-graph_builder.add_edge("classification", "verification")
-graph_builder.add_edge("verification", "public_updates")
+graph_builder.add_edge("classification", "public_updates")
 graph_builder.add_edge("public_updates", "echo")
 graph_builder.add_edge("echo", END)
 

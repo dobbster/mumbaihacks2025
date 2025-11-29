@@ -150,11 +150,11 @@ def get_public_update_service() -> PublicUpdateService:
     storage_service = get_storage_service()
     pattern_service = get_pattern_detection_service()
     classification_service = get_classification_service()
-    verification_service = get_verification_service()
+    # Verification service is optional - pass None to disable it
     return PublicUpdateService(
         storage_service,
         pattern_service,
         classification_service,
-        verification_service
+        verification_service=None  # Disabled for hackathon
     )
 

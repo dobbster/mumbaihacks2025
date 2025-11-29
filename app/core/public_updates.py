@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from app.core.storage import StorageService
 from app.core.pattern_detection import PatternDetectionService
 from app.core.classification import ClassificationService
-from app.core.verification import VerificationService
+from app.core.verification import VerificationService, VerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class PublicUpdateService:
         storage_service: StorageService,
         pattern_service: PatternDetectionService,
         classification_service: ClassificationService,
-        verification_service: VerificationService
+        verification_service: Optional[VerificationService] = None
     ):
         """
         Initialize public update service.
@@ -69,12 +69,26 @@ class PublicUpdateService:
             storage_service: Storage service
             pattern_service: Pattern detection service
             classification_service: Classification service
-            verification_service: Verification service
+            verification_service: Optional verification service (if None, returns dummy verification results)
         """
         self.storage_service = storage_service
         self.pattern_service = pattern_service
         self.classification_service = classification_service
         self.verification_service = verification_service
+    
+    def _get_dummy_verification_result(self) -> VerificationResult:
+        """Return a dummy verification result when verification service is not available."""
+        return VerificationResult(
+            is_verified=False,
+            verification_status="unverified",
+            confidence=0.0,
+            fact_check_sources=[],
+            cross_references=[],
+            evidence_for=[],
+            evidence_against=[],
+            verification_summary="Verification not performed (service disabled)",
+            sources=[]
+        )
     
     def generate_update(
         self,
@@ -104,11 +118,14 @@ class PublicUpdateService:
             cluster_datapoints
         )
         
-        # Get verification
-        verification_result = self.verification_service.verify_cluster(
-            cluster_id,
-            classification_result.model_dump()
-        )
+        # Get verification (or use dummy if service not available)
+        if self.verification_service:
+            verification_result = self.verification_service.verify_cluster(
+                cluster_id,
+                classification_result.model_dump()
+            )
+        else:
+            verification_result = self._get_dummy_verification_result()
         
         # Generate update
         if use_llm:

@@ -21,8 +21,7 @@ def verify(request: VerifyRequest) -> Dict[str, Any]:
     4. Clusters datapoints by topic
     5. Detects misinformation patterns
     6. Classifies clusters
-    7. Verifies claims
-    8. Generates public updates
+    7. Generates public updates
     
     Returns the public_updates from the final state.
     """
@@ -37,7 +36,6 @@ def verify(request: VerifyRequest) -> Dict[str, Any]:
         "clustering_stats": None,
         "pattern_analyses": None,
         "classifications": None,
-        "verifications": None,
         "public_updates": None
     }
     
@@ -51,6 +49,8 @@ def verify(request: VerifyRequest) -> Dict[str, Any]:
     return {
         "status": "success",
         "prompt": request.prompt,
+        "queries": final_state.get("queries"),
+        "results": final_state.get("results"),
         "public_updates": public_updates,
         "summary": {
             "total_clusters": len(final_state.get("clusters", {})),
@@ -59,6 +59,6 @@ def verify(request: VerifyRequest) -> Dict[str, Any]:
             "clustering_stats": final_state.get("clustering_stats")
         },
         "clusters": final_state.get("clusters"),
-        "classifications": final_state.get("classifications"),
-        "verifications": final_state.get("verifications")
+        "pattern_analyses": final_state.get("pattern_analyses"),
+        "classifications": final_state.get("classifications")
     }
