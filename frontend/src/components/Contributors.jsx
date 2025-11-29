@@ -2,28 +2,28 @@ const team = [
   {
     name: "Ranjith Perumal",
     role: "Full Stack AI Developer",
-    img: "https://via.placeholder.com/150",
+    img: "https://avatar.iran.liara.run/username?username=Ranjith+Perumal",
     desc: "Architecting solutions, AI development, etc.",
     hobbies: "Travelling, Exploring new tech and Swimming."
   },
   {
     name: "Vivek Sharma",
     role: "Full Stack AI Developer",
-    img: "https://via.placeholder.com/150",
+    img: "https://avatar.iran.liara.run/username?username=Vivek+Sharma",
     desc: "Nvidia certified agentic AI professional, building full stack solutions.",
     hobbies: "Playing PC Games, Outdoor sports and Photography."
   },
   {
     name: "Harsh Sinha",
     role: "Platform Engineer",
-    img: "https://via.placeholder.com/150",
+    img: "https://avatar.iran.liara.run/username?username=Harsh+Sinha",
     desc: "Specializes in ML-OPs deployments, building CI/CD pipelines, etc.",
     hobbies: "Playing PC Games.",
   },
   {
     name: "Ameya Kirtikar",
     role: "Full Stack AI Developer",
-    img: "https://via.placeholder.com/150",
+    img: "https://avatar.iran.liara.run/username?username=Ameya+Kirtikar",
     desc: "Specializes in full stack development.",
     hobbies: "Trekking, Swimming and Football.",
   },

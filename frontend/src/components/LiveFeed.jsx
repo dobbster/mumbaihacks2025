@@ -1,15 +1,15 @@
 import { Rss } from "lucide-react";
 
 const dummyRSS = [
-  { title: "Breaking News 1", desc: "Short description 1", confidence: 20 },
-  { title: "Breaking News 2", desc: "Short description 2", confidence: 85 },
-  { title: "Breaking News 3", desc: "Short description 3", confidence: 60 },
-  { title: "Breaking News 4", desc: "Short description 4", confidence: 35 },
+  { title: "Russian President Vladimir Putin to visit India on December 4-5 for annual summit", desc: "The Ministry of External Affairs on Friday announced that Putin will visit India on December 4 and 5. The visit aims to strengthen India-Russia ties and discuss key regional and global issues.", confidence: 20 },
+  { title: "Wedding choreographer issues statement amid Smriti Mandhana–Palaash Muchhal ‘cheating’ controversy", desc: "After much speculation surrounding the wedding of Smriti Mandhana and Palaash Muchhal, one of the choreographers has issued a clarification", confidence: 85 },
+  { title: "‘India will be completely free of Naxalism’: Amit Shah's bold remark, sets deadline", desc: "“A 360-degree attack has to be launched against narcotics and organised crime,” Amit Shah said in Raipur.", confidence: 60 },
+  { title: "RBI Imposes Rs 91 Lakh Fine On HDFC Bank For Violations Including KYC Lapses", desc: "The penalty has been imposed on the private sector lender for deficiencies in statutory and regulatory compliance, including those related to Know Your Customer (KYC).", confidence: 35 },
 ];
 
 const getConfidenceClasses = (confidence) => {
-  if (confidence < 40) return "text-red-400 animate-pulse";
-  if (confidence >= 80) return "text-green-400 font-bold";
+  if (confidence >= 80) return "text-red-400 animate-pulse";
+  if (confidence <= 40) return "text-green-400 font-bold";
   return "text-yellow-400";
 };
 
@@ -29,8 +29,8 @@ export default function LiveFeed() {
             key={index}
             className={`
               p-6 rounded-xl border transition
-              ${item.confidence >= 80 ? "border-green-500 bg-green-900/20" : "bg-gray-900 border-gray-700"}
-              ${item.confidence <= 40 ? "border-red-500" : "bg-gray-900 border-gray-700"}
+              ${item.confidence <= 40 ? "border-green-500 bg-green-900/20" : "bg-gray-900 border-gray-700"}
+              ${item.confidence >= 80 ? "border-red-500" : "bg-gray-900 border-gray-700"}
             `}
           >
             <h3 className="text-xl font-semibold">{item.title}</h3>
