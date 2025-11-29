@@ -292,7 +292,6 @@ class PatternDetectionService:
         credible_ratio = credible_count / total_sources if total_sources > 0 else 0.0
         source_diversity = len(source_counts)
         
-        # Check if fact-checkers are present (good sign) - DO THIS FIRST
         fact_checkers_present = any(
             source in FACT_CHECK_SOURCES 
             for source in source_counts.keys()
