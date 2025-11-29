@@ -1,6 +1,6 @@
 # Misinformation Detection System - Mumbai Hacks 2025
 
-An AI-powered misinformation detection system that analyzes news articles, clusters them by topic, detects misinformation patterns, and classifies claims using LLMs and external fact-checking sources.
+An AI-powered misinformation detection system that analyzes news articles, clusters them by topic, detects misinformation patterns, and classifies claims using LLMs and pattern analysis.
 
 ## System Overview
 
@@ -11,8 +11,7 @@ This system uses LangGraph to orchestrate a multi-stage misinformation detection
 3. **Ingestion**: Processes and stores articles with embeddings
 4. **Clustering**: Groups similar articles by topic using DBSCAN
 5. **Pattern Detection**: Analyzes clusters for misinformation patterns (rapid growth, source credibility, contradictions, narrative evolution)
-6. **Fact-Checking**: Searches external fact-checking organizations (Snopes, PolitiFact, etc.)
-7. **Classification**: Uses LLM to classify claims as misinformation, legitimate, or uncertain
+6. **Classification**: Uses LLM to classify claims as misinformation, legitimate, or uncertain
 
 ## Project Structure
 
@@ -87,10 +86,10 @@ curl -X POST http://localhost:2024/verify \
 
 **Response includes:**
 - Classification result (misinformation/legitimate/uncertain)
-- Confidence score
-- Fact-check results from external sources
-- Source URLs
-- Evidence chain
+- Confidence score (0.0-1.0)
+- Source URLs from analyzed articles
+- Evidence chain with reasoning
+- Key indicators that led to the classification
 
 ## Frontend
 
@@ -112,13 +111,13 @@ The frontend will be available at `http://localhost:5173` and connects to the ba
 
 ## Key Features
 
-- **Dynamic Source Selection**: LLM-powered selection of relevant news sources
-- **Topic Clustering**: DBSCAN-based clustering of similar articles
+- **Dynamic Source Selection**: LLM-powered selection of 3-8 relevant news sources (Indian + International)
+- **Topic Clustering**: DBSCAN-based clustering of similar articles with relevance filtering
 - **Pattern Detection**: Analyzes rapid growth, source credibility, contradictions, and narrative evolution
-- **External Fact-Checking**: Integrates with Snopes, PolitiFact, FactCheck.org, and other fact-checkers
 - **LLM Classification**: Uses Together AI's Llama models for intelligent classification
-- **Confidence Scoring**: Provides confidence scores (0.0-1.0) for all classifications
+- **Confidence Scoring**: Provides validated confidence scores (0.0-1.0) for all classifications
 - **Evidence Chains**: Transparent reasoning for every classification decision
+- **Source Attribution**: Lists all source URLs from analyzed articles
 
 ## Dependencies
 
@@ -139,40 +138,116 @@ The frontend will be available at `http://localhost:5173` and connects to the ba
 - `CLUSTERING_GUIDE.md`: Topic clustering guide
 - `PATTERN_DETECTION_GUIDE.md`: Pattern detection guide
 - `CLASSIFICATION_GUIDE.md`: Classification guide
-- `VERIFICATION_GUIDE.md`: Fact-checking and verification guide
+- `SYSTEM_CRITIQUE.md`: System architecture and status assessment
 
-## Workflow
+## LangGraph Workflow
 
-The system follows this workflow:
+The system follows this LangGraph workflow with detailed node descriptions:
 
 ```
-User Query
-    ↓
-Planner (Select Sources)
-    ↓
-Tavily Search (Fetch Articles)
-    ↓
-Ingestion (Process & Store)
-    ↓
-Clustering (Group by Topic)
-    ↓
-Pattern Detection (Analyze Patterns)
-    ↓
-Fact-Checking (External Verification)
-    ↓
-Classification (Final Verdict)
-    ↓
-Results
+┌─────────────────────────────────────────────────────────────────┐
+│                        START                                     │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. PLANNER NODE                                                  │
+│    • Uses LLM (Together AI) to analyze user query               │
+│    • Selects 3-8 most relevant news sources                     │
+│    • Considers: topic, geographic focus, information type       │
+│    • Sources: Indian (TOI, NDTV, The Hindu, etc.) +             │
+│      International (BBC, Reuters, AP, CNN, etc.)                 │
+│    • Generates search queries with site: filters                │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 2. TAVILY_SEARCH NODE                                            │
+│    • Executes Tavily API searches for each query                │
+│    • Fetches up to 5 results per query                           │
+│    • Filters results to only include selected sources           │
+│    • Normalizes domain names for accurate matching              │
+│    • Extracts: title, content, URL, published date, author        │
+│    • Generates unique IDs for each article                       │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 3. INGESTION NODE                                                │
+│    • Converts search results to DataPoint objects               │
+│    • Generates embeddings using Together AI (BAAI/bge-base)      │
+│    • Truncates text to 3000 chars (~400 tokens) for embeddings  │
+│    • Stores in MongoDB with metadata                            │
+│    • Detects and retrieves duplicate articles                    │
+│    • Combines new + retrieved duplicates for downstream use      │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 4. CLUSTERING NODE                                               │
+│    • Extracts datapoint IDs from ingested results               │
+│    • Runs DBSCAN clustering (eps=0.30, min_samples=2)           │
+│    • Includes context from recent datapoints (7 days)            │
+│    • Generates topic representation for each cluster            │
+│    • Filters clusters by relevance to user query                 │
+│    • Uses cosine similarity between cluster topics and query     │
+│    • Only keeps clusters with similarity ≥ 0.5                  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 5. PATTERN_DETECTION NODE                                        │
+│    • Identifies the most relevant cluster (highest score)       │
+│    • Analyzes only the most relevant cluster                    │
+│    • Detects rapid growth (10x threshold, tuned down)           │
+│    • Analyzes source credibility (credible vs questionable)      │
+│    • Detects contradictions (embedding + keyword-based)          │
+│    • Tracks narrative evolution over time                       │
+│    • Calculates overall risk score (0.0-1.0)                    │
+│    • Flags: rapid_growth, low_credibility, contradictions, etc. │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 6. CLASSIFICATION NODE                                            │
+│    • Identifies the most relevant cluster (from pattern_analyses)│
+│    • Filters cluster datapoints to current ingestion only       │
+│    • Extracts source URLs from filtered datapoints              │
+│    • Uses LLM (Meta-Llama-3.1-8B-Instruct-Turbo) to classify    │
+│    • Considers: pattern analysis, source credibility, growth     │
+│    • Returns: classification (misinformation/legitimate/uncertain)│
+│    • Provides: confidence score, evidence chain, key indicators  │
+│    • Includes: list of source URLs from analyzed articles        │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         END                                       │
+│    Returns classifications with confidence scores and sources    │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+### Node Details
+
+**State Management**: Each node receives and updates a shared `State` object containing:
+- `messages`: User query
+- `queries`: Generated search queries
+- `selected_sources`: Dynamically selected news sources
+- `results`: Raw search results from Tavily
+- `ingested_results`: Processed datapoints (new + duplicates)
+- `clusters`: Clustered datapoints with topic representations
+- `pattern_analyses`: Pattern detection results
+- `classifications`: Final classification results
 
 ## For Hackathon Judges
 
 This system demonstrates:
-- **Multi-stage AI pipeline** using LangGraph
-- **Intelligent source selection** based on query context
-- **Pattern-based detection** of misinformation signals
-- **External fact-checking integration** for verification
-- **LLM-powered classification** with explainable reasoning
-- **Real-time processing** of news articles
-- **Confidence scoring** for transparency
+- **Multi-stage AI pipeline** using LangGraph with 6 orchestrated nodes
+- **Intelligent source selection** using LLM to choose relevant news sources
+- **Pattern-based detection** of misinformation signals (growth, credibility, contradictions)
+- **LLM-powered classification** with explainable reasoning and evidence chains
+- **Real-time processing** of news articles from multiple sources
+- **Confidence scoring** with validation for transparency
+- **Topic clustering** with relevance filtering to focus on user queries
+- **Source attribution** showing all analyzed article URLs
 
