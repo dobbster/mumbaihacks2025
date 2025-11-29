@@ -537,12 +537,31 @@ def classification_node(state: State) -> State:
     classifications = {}
     try:
         # Get cluster datapoints
-        cluster_datapoints = storage_service.get_datapoints_by_cluster(most_relevant_cluster_id)
+        all_cluster_datapoints = storage_service.get_datapoints_by_cluster(most_relevant_cluster_id)
         
-        if not cluster_datapoints:
+        if not all_cluster_datapoints:
             logger.warning(f"No datapoints found for cluster {most_relevant_cluster_id}")
             state["classifications"] = {}
             return state
+        
+        # Filter to only include datapoints from the current ingestion run
+        # This ensures sources are only from datapoints relevant to the user's query
+        ingested_results = state.get("ingested_results", [])
+        ingested_ids = {dp.id for dp in ingested_results if hasattr(dp, 'id') and dp.id}
+        
+        # Filter cluster datapoints to only those from current ingestion
+        relevant_cluster_datapoints = []
+        for dp in all_cluster_datapoints:
+            dp_id = dp.get("_id") or dp.get("id")
+            if dp_id in ingested_ids:
+                relevant_cluster_datapoints.append(dp)
+        
+        if not relevant_cluster_datapoints:
+            logger.warning(f"No relevant datapoints found in cluster {most_relevant_cluster_id} from current ingestion")
+            # Fallback to all cluster datapoints if no matches
+            relevant_cluster_datapoints = all_cluster_datapoints
+        else:
+            logger.info(f"Filtered cluster datapoints: {len(relevant_cluster_datapoints)}/{len(all_cluster_datapoints)} from current ingestion")
         
         # Get pattern analysis for this cluster (should already exist from pattern_detection_node)
         pattern_analysis = pattern_analyses.get(most_relevant_cluster_id)
@@ -552,10 +571,11 @@ def classification_node(state: State) -> State:
             pattern_analysis = pattern_service.analyze_cluster(most_relevant_cluster_id)
         
         # Classify the cluster (pattern_analysis is required)
+        # Pass only relevant datapoints for source extraction
         classification_result = classification_service.classify_cluster(
             cluster_id=most_relevant_cluster_id,
             pattern_analysis=pattern_analysis,
-            cluster_datapoints=cluster_datapoints
+            cluster_datapoints=relevant_cluster_datapoints  # Only datapoints from current ingestion
         )
         
         classifications[most_relevant_cluster_id] = classification_result.model_dump() if hasattr(classification_result, 'model_dump') else classification_result

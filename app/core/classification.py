@@ -30,6 +30,7 @@ class ClassificationResult(BaseModel):
     reasoning: str = Field(description="Detailed reasoning for the classification")
     supporting_evidence: List[str] = Field(description="Evidence supporting misinformation claim")
     contradictory_evidence: List[str] = Field(description="Evidence contradicting misinformation claim")
+    sources: List[str] = Field(description="List of source URLs from all datapoints in the cluster", default_factory=list)
 
 
 class ClassificationService:
@@ -126,9 +127,21 @@ class ClassificationService:
             # Parse JSON response
             result = self._parse_llm_response(content)
             
+            # Extract source URLs from cluster datapoints
+            sources = []
+            if cluster_datapoints:
+                for dp in cluster_datapoints:
+                    url = dp.get("url") or dp.get("source_url")
+                    if url and url not in sources:
+                        sources.append(url)
+            
+            # Add sources to the result
+            result.sources = sources
+            
             logger.info(
                 f"Classification complete for {cluster_id}: "
-                f"{result.classification} (confidence: {result.confidence:.3f})"
+                f"{result.classification} (confidence: {result.confidence:.3f}, "
+                f"{len(sources)} sources)"
             )
             
             return result
@@ -136,6 +149,14 @@ class ClassificationService:
         except Exception as e:
             logger.error(f"Error classifying cluster {cluster_id}: {e}", exc_info=True)
             # Return uncertain classification on error
+            # Extract sources even on error
+            sources = []
+            if cluster_datapoints:
+                for dp in cluster_datapoints:
+                    url = dp.get("url") or dp.get("source_url")
+                    if url and url not in sources:
+                        sources.append(url)
+            
             return ClassificationResult(
                 is_misinformation=False,
                 confidence=0.0,
@@ -145,7 +166,8 @@ class ClassificationService:
                 key_indicators=[f"Error during classification: {str(e)}"],
                 reasoning=f"Failed to classify due to error: {str(e)}",
                 supporting_evidence=[],
-                contradictory_evidence=[]
+                contradictory_evidence=[],
+                sources=sources
             )
     
     def _build_classification_prompt(
@@ -390,7 +412,8 @@ Now analyze the cluster and provide your classification in the JSON format above
                     key_indicators=data.get("key_indicators", []),
                     reasoning=data.get("reasoning", "No reasoning provided"),
                     supporting_evidence=data.get("supporting_evidence", []),
-                    contradictory_evidence=data.get("contradictory_evidence", [])
+                    contradictory_evidence=data.get("contradictory_evidence", []),
+                    sources=data.get("sources", [])  # Sources will be populated from cluster_datapoints
                 )
             except json.JSONDecodeError as e:
                 logger.warning(f"Failed to parse extracted JSON: {e}")
@@ -461,6 +484,7 @@ Now analyze the cluster and provide your classification in the JSON format above
             key_indicators=["LLM response parsing required manual extraction"],
             reasoning=content[:500],  # First 500 chars
             supporting_evidence=[],
-            contradictory_evidence=[]
+            contradictory_evidence=[],
+            sources=[]  # Sources will be populated from cluster_datapoints
         )
 
