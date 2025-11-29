@@ -29,24 +29,41 @@ def get_mongo_client() -> MongoClient:
     Otherwise, constructs URL from MONGO_ROOT_USERNAME and MONGO_ROOT_PASSWORD if available.
     """
     mongo_url = os.getenv("MONGODB_URL")
-    
-    # If MONGODB_URL is explicitly set, use it
-    if mongo_url:
-        return MongoClient(mongo_url)
-    
-    # Otherwise, try to construct from individual credentials
     username = os.getenv("MONGO_ROOT_USERNAME", "admin")
     password = os.getenv("MONGO_ROOT_PASSWORD", "changeme")
     db_name = os.getenv("MONGODB_DB_NAME", "misinformation_detection")
     
-    if username and password:
-        # Construct authenticated connection string
-        mongo_url = f"mongodb://{username}:{password}@localhost:27017/{db_name}?authSource=admin"
-        logger.info("Using MongoDB with authentication")
+    # If MONGODB_URL is set but doesn't contain credentials, construct authenticated URL
+    if mongo_url and "@" not in mongo_url and username and password:
+        # MONGODB_URL provided but no credentials - add them
+        # Extract host/port from MONGODB_URL or use defaults
+        if "://" in mongo_url:
+            # Extract everything after mongodb://
+            parts = mongo_url.split("://", 1)[1]
+            if "/" in parts:
+                host_port = parts.split("/")[0]
+            else:
+                host_port = parts.split("?")[0] if "?" in parts else parts
+        else:
+            host_port = "localhost:27017"
+        
+        mongo_url = f"mongodb://{username}:{password}@{host_port}/{db_name}?authSource=admin"
+        logger.info("Using MongoDB with authentication (credentials added to MONGODB_URL)")
+    elif not mongo_url:
+        # No MONGODB_URL provided - construct from individual credentials
+        if username and password:
+            # Construct authenticated connection string
+            mongo_url = f"mongodb://{username}:{password}@localhost:27017/{db_name}?authSource=admin"
+            logger.info("Using MongoDB with authentication")
+        else:
+            # No authentication
+            mongo_url = "mongodb://localhost:27017"
+            logger.info("Using MongoDB without authentication")
+    # If MONGODB_URL is set and contains credentials, use it as-is
+    elif mongo_url and "@" in mongo_url:
+        logger.info("Using MongoDB with authentication (from MONGODB_URL)")
     else:
-        # No authentication
-        mongo_url = "mongodb://localhost:27017"
-        logger.info("Using MongoDB without authentication")
+        logger.info("Using MongoDB without authentication (from MONGODB_URL)")
     
     return MongoClient(mongo_url)
 
