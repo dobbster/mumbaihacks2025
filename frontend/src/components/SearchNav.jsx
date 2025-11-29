@@ -3338,109 +3338,212 @@ const mockData = {
   };
 
   return (
-    <section className="max-w-7xl w-full flex flex-col md:flex-row items-center gap-14">
-      <div className="w-full bg-gray-900 text-white p-4 shadow-lg">
-        <h1 className="text-l font-semibold">Information Search</h1>
-        <div className="mt-4 p-4 bg-gray-800 rounded-lg animate-fadeIn">
-          <div className="flex gap-3">
-            <input
-              type="text"
-              placeholder="Enter text..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none"
-            />
+    <section className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full">
+        {/* Header */}
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
+            Information Verification
+          </h1>
+          <p className="text-gray-400 text-sm">Verify claims and detect misinformation with AI-powered analysis</p>
+        </div>
 
-            <button
-              onClick={handleVerify}
-              disabled={loading}
-              className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Verifying..." : "Verify"}
-            </button>
+        {/* Search Card */}
+        <div className="bg-gradient-to-br from-gray-800/90 to-gray-900/90 backdrop-blur-xl border border-gray-700/50 rounded-2xl shadow-2xl p-6 mb-6 animate-fadeIn">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                placeholder="Enter a claim or question to verify..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && !loading && query.trim() && handleVerify()}
+                className="w-full px-4 py-3 pr-12 rounded-xl bg-gray-800/50 text-white border border-gray-600/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-gray-500"
+              />
+              <svg className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
 
-            <button
-    onClick={handleClear}
-    className="px-4 py-2 bg-red-500 rounded-lg hover:bg-red-600 transition"
-  >
-    Clear
-  </button>
-          </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleVerify}
+                disabled={loading || !query.trim()}
+                className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg shadow-green-500/20 hover:shadow-green-500/30 flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Verifying...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Verify</span>
+                  </>
+                )}
+              </button>
 
-          {/* Result Container */}
-          <div className="mt-3 p-3 bg-gray-700 rounded-lg text-sm text-gray-200">
-            {loading && (
-              <div className="text-center py-4">
-                <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
-                <p className="mt-2 text-gray-300">Analyzing your query...</p>
-              </div>
-            )}
-            
-            {error && !loading && (
-              <div className="text-red-400 mb-2">
-                <span className="font-semibold">Error: </span>
-                <span>{error}</span>
-              </div>
-            )}
-
-            {result && result.title === 'Please enter something to verify.' ? (
-                <div>
-                  <span>{result.title}</span>
-                </div>
-              ) : result && result.title === 'No updates available' ? (
-                <div>
-                  <span className="font-semibold">Title:</span>{" "}
-                  <span>{result.title}</span>
-                </div>
-              ) : result && !loading && result.title !== 'No updates available' && result.title !== 'Please enter something to verify.' ? (
-              <div className="space-y-2">
-                <div>
-                  <span className="font-semibold">Title:</span>{" "}
-                  <span>{result.title}</span>
-                </div>
-                <div>
-                  <span className="font-semibold">Status:</span>{" "}
-                  <span className={`capitalize ${getStatusColor(result.status)}`}>{result.status}</span>
-                </div>
-                {/* <div>
-                  <span className="font-semibold">Summary:</span>{" "}
-                  <span>{result.summary}</span>
-                </div> */}
-                <div>
-                  <span className="font-semibold">Explanation:</span>
-                  <div className="mt-1 text-sm text-gray-300">{result.explanation}</div>
-                </div>
-                <div>
-                <span className="font-semibold">Sources:</span>
-                <ul className="list-disc ml-6 mt-1 space-y-1">
-                  {result.source.length > 0 ? (
-                    result.source.slice(0, 5).map((src, idx) => (
-                      <li key={idx}>
-                        <a
-                          href={src}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline text-blue-300"
-                        >
-                          {src}
-                        </a>
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-gray-400">No sources</li>
-                  )}
-                </ul>
-              </div>
-                <div>
-                  <span className="font-semibold">Confidence:</span>{" "}
-                  <span>{result.confidence}</span>
-                </div>
-              </div>
-            ) : !loading && !result ? (
-              "Result will appear here."
-            ) : null}
+              {query && (
+                <button
+                  onClick={handleClear}
+                  className="px-4 py-3 bg-gray-700/50 hover:bg-gray-700 rounded-xl transition-all border border-gray-600/50 hover:border-gray-500/50"
+                  title="Clear"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Result Container */}
+        {loading && (
+          <div className="bg-gradient-to-br from-gray-800/90 to-gray-900/90 backdrop-blur-xl border border-gray-700/50 rounded-2xl shadow-2xl p-8 text-center animate-fadeIn">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
+            <p className="text-gray-300 text-lg font-medium">Analyzing your query...</p>
+            <p className="text-gray-500 text-sm mt-2">This may take a few moments</p>
+          </div>
+        )}
+        
+        {error && !loading && (
+          <div className="bg-gradient-to-br from-red-900/20 to-red-800/20 backdrop-blur-xl border border-red-700/50 rounded-2xl shadow-2xl p-6 animate-fadeIn">
+            <div className="flex items-center gap-3 text-red-400">
+              <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <span className="font-semibold text-lg">Error: </span>
+                <span className="text-red-300">{error}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {result && result.title === 'Please enter something to verify.' ? (
+          <div className="bg-gradient-to-br from-gray-800/90 to-gray-900/90 backdrop-blur-xl border border-gray-700/50 rounded-2xl shadow-2xl p-8 text-center animate-fadeIn">
+            <svg className="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+            <p className="text-gray-400 text-lg">{result.title}</p>
+          </div>
+        ) : result && result.title === 'No updates available' ? (
+          <div className="bg-gradient-to-br from-gray-800/90 to-gray-900/90 backdrop-blur-xl border border-gray-700/50 rounded-2xl shadow-2xl p-6 animate-fadeIn">
+            <div className="text-gray-300">
+              <span className="font-semibold">Title:</span>{" "}
+              <span>{result.title}</span>
+            </div>
+          </div>
+        ) : result && !loading && result.title !== 'No updates available' && result.title !== 'Please enter something to verify.' ? (
+          <div className="bg-gradient-to-br from-gray-800/90 to-gray-900/90 backdrop-blur-xl border border-gray-700/50 rounded-2xl shadow-2xl p-6 animate-fadeIn">
+            {/* Title Section */}
+            <div className="mb-6 pb-6 border-b border-gray-700/50">
+              <h2 className="text-2xl font-bold text-white mb-2">{result.title}</h2>
+            </div>
+
+            {/* Status Badge */}
+            <div className="mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gray-800/50 border border-gray-700/50">
+                <span className="text-sm font-medium text-gray-400">Status:</span>
+                <span className={`capitalize font-semibold text-lg ${getStatusColor(result.status)}`}>
+                  {result.status}
+                </span>
+                {result.status.toLowerCase() === "misinformation" && (
+                  <svg className="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                )}
+                {result.status.toLowerCase() === "legitimate" && (
+                  <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                )}
+                {result.status.toLowerCase() === "uncertain" && (
+                  <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </div>
+            </div>
+
+            {/* Explanation Section */}
+            <div className="mb-6 p-4 bg-gray-800/30 rounded-xl border border-gray-700/30">
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h-1v2m0 0h-1m1 0h1m-1 0v2m0 0h1m-1 0H9m4 0v2m0 0h-1m1 0h1m-1 0v-2m0 0h1m-1 0H9" />
+                </svg>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-300 mb-2">Explanation</h3>
+                  <p className="text-gray-400 leading-relaxed">{result.explanation}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sources Section */}
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <h3 className="font-semibold text-gray-300">Sources</h3>
+                <span className="text-xs text-gray-500 bg-gray-800/50 px-2 py-1 rounded-full">
+                  {result.source.length > 0 ? result.source.length : 0}
+                </span>
+              </div>
+              {result.source.length > 0 ? (
+                <div className="space-y-2">
+                  {result.source.slice(0, 5).map((src, idx) => (
+                    <a
+                      key={idx}
+                      href={src}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 p-3 bg-gray-800/30 hover:bg-gray-800/50 rounded-lg border border-gray-700/30 hover:border-blue-500/50 transition-all group"
+                    >
+                      <svg className="w-4 h-4 text-gray-500 group-hover:text-blue-400 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      <span className="text-sm text-blue-300 group-hover:text-blue-200 truncate flex-1">{src}</span>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/30 text-center text-gray-500 text-sm">
+                  No sources available
+                </div>
+              )}
+            </div>
+
+            {/* Confidence Score */}
+            <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-xl border border-blue-700/30">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-semibold text-gray-300">Confidence Score</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                  {result.confidence}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : !loading && !result ? (
+          <div className="bg-gradient-to-br from-gray-800/90 to-gray-900/90 backdrop-blur-xl border border-gray-700/50 rounded-2xl shadow-2xl p-12 text-center animate-fadeIn">
+            <svg className="w-20 h-20 mx-auto text-gray-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            <p className="text-gray-500 text-lg">Enter a query above to see verification results</p>
+          </div>
+        ) : null}
       </div>
     </section>
   );
