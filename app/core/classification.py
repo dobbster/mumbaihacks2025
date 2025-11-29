@@ -251,7 +251,6 @@ class ClassificationService:
 ## Sample Article Titles
 {chr(10).join(sample_titles)}
 
----
 
 ## Your Task
 
@@ -285,6 +284,16 @@ Consider:
    - Use risk score as ONE factor, not the sole determinant
    - Low risk score with credible sources = likely legitimate
    - High risk score alone is NOT sufficient - need multiple strong indicators
+
+6. **External Fact-Check Results** (HIGHEST PRIORITY):
+   - **If fact-check shows "verified" or "outright fact"**: Classify as "legitimate" with high confidence
+   - **If fact-check shows "false" or "outright misinformation"**: Classify as "misinformation" with high confidence
+   - **IMPORTANT: For factual questions (what is, who is, etc.), "verified" fact-checks should strongly favor "legitimate"**
+   - **IMPORTANT: Require multiple "false" verdicts (≥2) before classifying as misinformation - single false verdict may be debunking a false claim ABOUT the topic**
+   - **Fact-check results from reputable organizations override pattern analysis when available**
+   - **Multiple fact-check articles with consistent verdicts are highly reliable**
+   - **If fact-check is "unverified" or "disputed"**: Use pattern analysis and other indicators
+   - **If fact-check found no articles or is "unverified" for a factual question**: Default to "legitimate" if credible sources are present
 
 ## Classification Criteria
 

@@ -239,10 +239,10 @@ The classification service automatically:
 
 After classification:
 
-1. **Verification**: Cross-reference with fact-checking databases
-2. **Public Updates**: Generate user-friendly summaries
-3. **Alerting**: Notify when high-confidence misinformation detected
-4. **Human Review**: Queue uncertain classifications for review
+1. **Fact-Checking**: Already integrated - external fact-checking influences classification
+2. **Results Display**: Classification results are returned via `/verify` endpoint
+3. **Frontend Integration**: Results displayed in React frontend
+4. **Future Enhancements**: Alerting, human review queue, batch processing
 
 ## Troubleshooting
 

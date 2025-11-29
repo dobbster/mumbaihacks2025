@@ -5,8 +5,8 @@
 Topic clustering groups semantically similar news articles and datapoints together, enabling:
 1. **Pattern Detection**: Identify emerging misinformation patterns within clusters
 2. **Temporal Analysis**: Track how misinformation evolves within topic clusters
-3. **Verification**: Cross-reference claims within the same cluster
-4. **Public Updates**: Generate contextual summaries of related information
+3. **Fact-Checking**: Cross-reference claims with external fact-checking sources
+4. **Classification**: Analyze clusters for misinformation classification
 
 ## How to Cluster Datapoints
 
@@ -361,21 +361,21 @@ Each cluster contains:
 ### Current Pipeline
 
 ```
-1. Ingestion
+1. Planner (Select Sources)
    ↓
-2. Vectorization (embeddings)
+2. Tavily Search (Fetch Articles)
    ↓
-3. Storage in MongoDB
+3. Ingestion (Process & Store)
    ↓
 4. Clustering (groups similar topics) ← YOU ARE HERE
    ↓
 5. Pattern Detection (analyze clusters)
    ↓
-6. Classification (misinformation vs. fact)
+6. Fact-Checking (external verification)
    ↓
-7. Verification (cross-reference claims)
+7. Classification (misinformation vs. fact)
    ↓
-8. Public Updates (contextual summaries)
+8. Results
 ```
 
 ### What's Next: Pattern Detection
@@ -592,20 +592,20 @@ After clustering works, implement:
    - Identify rapidly growing clusters
    - Flag clusters with conflicting sources
 
-2. **Classification Node** (LangGraph):
-   - For each cluster, classify misinformation likelihood
-   - Use LLM to analyze cluster content
-   - Consider source credibility within cluster
+2. **Pattern Detection Node** (LangGraph):
+   - Analyze clusters for misinformation patterns
+   - Calculate risk scores
+   - Identify flags (rapid growth, low credibility, contradictions, evolution)
 
-3. **Verification Node** (LangGraph):
-   - Cross-reference claims within clusters
-   - Check against fact-checking databases
-   - Identify contradictions
+3. **Fact-Checking Node** (LangGraph):
+   - Search external fact-checking organizations
+   - Extract verdicts from fact-check articles
+   - Aggregate results
 
-4. **Public Update Node** (LangGraph):
-   - Generate summaries of cluster topics
-   - Explain why information is flagged
-   - Provide context and verified facts
+4. **Classification Node** (LangGraph):
+   - Use LLM to classify clusters
+   - Consider pattern detection and fact-check results
+   - Provide confidence scores and evidence chains
 
 ## Troubleshooting
 

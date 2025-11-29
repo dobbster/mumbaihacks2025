@@ -34,6 +34,10 @@ MONGODB_DB_NAME=misinformation_detection
 # Together AI Configuration
 TOGETHER_API_KEY=your_together_api_key_here
 TOGETHER_EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
+TOGETHER_LLM_MODEL=meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
+
+# Tavily Search API
+TAVILY_API_KEY=your_tavily_api_key_here
 ```
 
 **Option 2: Without MongoDB Authentication (Development Only)**
@@ -45,6 +49,10 @@ MONGODB_DB_NAME=misinformation_detection
 # Together AI Configuration
 TOGETHER_API_KEY=your_together_api_key_here
 TOGETHER_EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
+TOGETHER_LLM_MODEL=meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
+
+# Tavily Search API
+TAVILY_API_KEY=your_tavily_api_key_here
 ```
 
 **Note:** If your MongoDB container has authentication enabled (check `docker-compose.yml`), you MUST use Option 1 with credentials.
@@ -77,32 +85,45 @@ You should see:
 ✅ Collection 'datapoints' has X indexes
 ```
 
-## Step 5: Test Ingestion
+## Step 5: Start the LangGraph Server
 
 ```bash
 # Start the LangGraph server
-langgraph dev
+langgraph dev --allow-blocking --no-browser
+```
 
-# In another terminal, test ingestion
-# The API accepts both formats: raw array or wrapped in {"datapoints": [...]}
+The server will start on `http://localhost:2024`.
+
+## Step 6: Test the Verification Endpoint
+
+The main endpoint is `/verify` which runs the complete misinformation detection pipeline:
+
+```bash
+# Test with a simple query
+curl -X POST http://localhost:2024/verify \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Is it true that vaccines cause autism?", "max_results": 5}'
+```
+
+**Response includes:**
+- Classification result (misinformation/legitimate/uncertain)
+- Confidence score
+- Fact-check results from external sources
+- Source URLs
+- Evidence chain
+
+### Alternative: Test Individual Components
+
+You can also test individual components:
+
+```bash
+# Test ingestion
 curl -X POST http://localhost:2024/ingestion/datapoints \
   -H "Content-Type: application/json" \
   -d @examples/datapoints_example.json
 
-# Or test Together AI connection (use uv run for proper environment)
-uv run python scripts/check_together_api.py
-```
-
-## Step 6: Test Clustering
-
-```python
-from app.core.clustering import ClusteringService
-from app.dependencies import get_storage_service
-
-storage_service = get_storage_service()
-clustering_service = ClusteringService(storage_service)
-clusters = clustering_service.cluster_recent_datapoints(hours=24)
-print(f"Found {len(clusters)} clusters")
+# Test clustering
+curl -X POST "http://localhost:2024/clustering/cluster?hours=8760&eps=0.30&min_cluster_size=2"
 ```
 
 ## Troubleshooting
@@ -121,12 +142,27 @@ docker-compose logs mongodb
 - Verify `TOGETHER_API_KEY` is set correctly
 - Check your API key at https://api.together.xyz/
 
+## Frontend (Optional)
+
+To run the React frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173` and connects to the backend API.
+
 ## Next Steps
 
+- Read `README.md` for system overview
 - Read `DOCKER_SETUP.md` for detailed MongoDB setup
-- Read `TOGETHER_AI_SETUP.md` for embedding configuration
 - Read `INGESTION_PLAN.md` for data ingestion workflow
-- Read `CLUSTERING_RECOMMENDATIONS.md` for clustering tuning
+- Read `CLUSTERING_GUIDE.md` for clustering details
+- Read `PATTERN_DETECTION_GUIDE.md` for pattern detection
+- Read `CLASSIFICATION_GUIDE.md` for classification
+- Read `VERIFICATION_GUIDE.md` for fact-checking
 
 ## Common Commands
 

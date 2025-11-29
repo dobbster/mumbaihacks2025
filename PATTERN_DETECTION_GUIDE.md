@@ -301,10 +301,9 @@ def pattern_detection_node(state: AgentState) -> AgentState:
 
 ## Next Steps
 
-1. **Classification**: Use pattern detection results to classify misinformation
-2. **Verification**: Cross-reference high-risk clusters with fact-checking databases
-3. **Public Updates**: Generate user-friendly summaries for high-risk clusters
-4. **Alerting**: Set up alerts for clusters with risk score > 0.7
+1. **Fact-Checking**: External fact-checking organizations verify claims (already integrated)
+2. **Classification**: Use pattern detection and fact-check results to classify misinformation (already integrated)
+3. **Alerting**: Set up alerts for clusters with risk score > 0.7 (future enhancement)
 
 ## Troubleshooting
 

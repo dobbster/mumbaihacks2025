@@ -13,8 +13,6 @@ from app.core.storage import StorageService
 from app.core.clustering import ClusteringService
 from app.core.pattern_detection import PatternDetectionService
 from app.core.classification import ClassificationService
-from app.core.verification import VerificationService
-from app.core.public_updates import PublicUpdateService
 
 logger = logging.getLogger(__name__)
 
@@ -137,24 +135,4 @@ def get_pattern_detection_service() -> PatternDetectionService:
 def get_classification_service() -> ClassificationService:
     """Get classification service."""
     return ClassificationService()
-
-
-def get_verification_service() -> VerificationService:
-    """Get verification service."""
-    storage_service = get_storage_service()
-    return VerificationService(storage_service)
-
-
-def get_public_update_service() -> PublicUpdateService:
-    """Get public update service."""
-    storage_service = get_storage_service()
-    pattern_service = get_pattern_detection_service()
-    classification_service = get_classification_service()
-    # Verification service is optional - pass None to disable it
-    return PublicUpdateService(
-        storage_service,
-        pattern_service,
-        classification_service,
-        verification_service=None  # Disabled for hackathon
-    )
 

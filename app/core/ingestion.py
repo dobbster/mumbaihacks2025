@@ -294,15 +294,16 @@ class IngestionService:
     def _prepare_text_for_embedding(self, datapoint: DataPoint) -> str:
         """
         Prepare text for embedding by combining title and content.
+        Truncates to ensure it fits within embedding model's token limit (512 tokens).
         
         Args:
             datapoint: DataPoint to prepare text for
             
         Returns:
-            Combined text string for embedding
+            Combined text string for embedding (truncated to ~400 tokens for safety)
         """
         # Combine title and content for better semantic understanding
-        text_parts = [datapoint.title]
+        text_parts = [datapoint.title] if datapoint.title else []
         
         if datapoint.content:
             text_parts.append(datapoint.content)
@@ -311,7 +312,35 @@ class IngestionService:
         if datapoint.categories:
             text_parts.append(" ".join(datapoint.categories))
         
-        return " ".join(text_parts).strip()
+        combined_text = " ".join(text_parts).strip()
+        
+        # Truncate to ~400 tokens (roughly 3000 characters) to stay within 512 token limit
+        # Using character count as rough estimate: ~7.5 chars per token for English
+        max_chars = 3000  # Conservative limit for ~400 tokens
+        
+        if len(combined_text) > max_chars:
+            # Truncate but try to preserve title and first part of content
+            if datapoint.title and len(datapoint.title) < max_chars:
+                # Keep full title, truncate content
+                remaining_chars = max_chars - len(datapoint.title) - 1  # -1 for space
+                if datapoint.content:
+                    truncated_content = datapoint.content[:remaining_chars]
+                    # Try to truncate at word boundary
+                    last_space = truncated_content.rfind(' ')
+                    if last_space > remaining_chars * 0.8:  # If we can find a word boundary
+                        truncated_content = truncated_content[:last_space]
+                    combined_text = f"{datapoint.title} {truncated_content}"
+                else:
+                    combined_text = datapoint.title
+            else:
+                # Title itself is too long, truncate everything
+                combined_text = combined_text[:max_chars]
+                # Try to truncate at word boundary
+                last_space = combined_text.rfind(' ')
+                if last_space > max_chars * 0.8:
+                    combined_text = combined_text[:last_space]
+        
+        return combined_text
     
     def _parse_datetime(self, dt_string: str) -> datetime:
         """Parse ISO format datetime string."""

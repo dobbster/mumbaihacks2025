@@ -28,6 +28,7 @@ def verify(request: VerifyRequest) -> Dict[str, Any]:
     initial_state = {
         "messages": [request.prompt],
         "queries": [],
+        "selected_sources": None,
         "results": [],
         "ingested_results": None,
         "ingestion_stats": None,
@@ -43,11 +44,12 @@ def verify(request: VerifyRequest) -> Dict[str, Any]:
     # Extract classifications from the final state
     classifications = final_state.get("classifications", {})
     
-    # Return comprehensive results including classifications
+    # Return comprehensive results
     return {
         "status": "success",
         "prompt": request.prompt,
         "queries": final_state.get("queries"),
+        "selected_sources": final_state.get("selected_sources"),
         "results": final_state.get("results"),
         "classifications": classifications,
         "summary": {

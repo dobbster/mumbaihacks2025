@@ -78,6 +78,7 @@ class State(TypedDict):
     """State of the agent."""
     messages: Annotated[list, lambda x, y: x + y]
     queries: list
+    selected_sources: Optional[List[str]]  # Dynamically selected sources
     results: list
     ingested_results: Optional[List[DataPoint]]
     ingestion_stats: Optional[Dict[str, Any]]
@@ -167,9 +168,16 @@ def filter_clusters_by_relevance(
     if not clusters or not user_prompt:
         return clusters
     
-    # Generate embedding for user prompt
+    # Generate embedding for user prompt (truncate if too long)
     try:
-        prompt_embedding = vectorization_service.generate_embedding(user_prompt.lower())
+        # Truncate prompt to ~400 tokens (3000 chars) for embedding
+        truncated_prompt = user_prompt.lower()[:3000]
+        if len(user_prompt) > 3000:
+            # Try to truncate at word boundary
+            last_space = truncated_prompt.rfind(' ')
+            if last_space > 2500:
+                truncated_prompt = truncated_prompt[:last_space]
+        prompt_embedding = vectorization_service.generate_embedding(truncated_prompt)
     except Exception as e:
         logger.warning(f"Failed to generate embedding for prompt, returning all clusters: {e}")
         return clusters
@@ -199,9 +207,15 @@ def filter_clusters_by_relevance(
         else:
             continue
         
-        # Generate embedding for topic representation
+        # Generate embedding for topic representation (truncate if too long)
         try:
-            topic_embedding = vectorization_service.generate_embedding(topic_repr.lower())
+            # Truncate topic to ~400 tokens (3000 chars) for embedding
+            truncated_topic = topic_repr.lower()[:3000]
+            if len(topic_repr) > 3000:
+                last_space = truncated_topic.rfind(' ')
+                if last_space > 2500:
+                    truncated_topic = truncated_topic[:last_space]
+            topic_embedding = vectorization_service.generate_embedding(truncated_topic)
             similarity = cosine_similarity(prompt_embedding, topic_embedding)
             
             if similarity >= similarity_threshold:
@@ -229,39 +243,154 @@ def filter_clusters_by_relevance(
 
 
 def planner_node(state: State) -> State:
-    """Generate search queries from the user's prompt using Together Python SDK, limited to Indian news outlets."""
+    """Dynamically decide which sources to search based on the user's prompt using LLM."""
     user_message = state["messages"][-1] if state["messages"] else ""
-    # List of trusted Indian news domains
-    indian_news_sites = [
-        "timesofindia.indiatimes.com",
-        "ndtv.com",
-        "thehindu.com",
-        "indianexpress.com",
-        "hindustantimes.com",
-        "livemint.com",
-        "business-standard.com",
-        "news18.com",
-        "scroll.in",
-        "deccanherald.com"
-    ]
-    # Generate queries for each site
-    queries = [f"site:{site} {user_message}" for site in indian_news_sites]
+    
+    # Comprehensive list of available news sources (Indian and international)
+    available_sources = {
+        # Indian News Sources
+        "timesofindia.indiatimes.com": "The Times of India - Major Indian newspaper",
+        "ndtv.com": "NDTV - Indian news channel",
+        "thehindu.com": "The Hindu - Indian newspaper",
+        "indianexpress.com": "Indian Express - Indian newspaper",
+        "hindustantimes.com": "Hindustan Times - Indian newspaper",
+        "livemint.com": "Livemint - Indian business news",
+        "business-standard.com": "Business Standard - Indian business news",
+        "news18.com": "News18 - Indian news channel",
+        "scroll.in": "Scroll.in - Indian news website",
+        "deccanherald.com": "Deccan Herald - Indian newspaper",
+        "firstpost.com": "Firstpost - Indian news website",
+        "indiatoday.in": "India Today - Indian news channel",
+        # International Sources
+        "bbc.com": "BBC - British news",
+        "reuters.com": "Reuters - International news agency",
+        "apnews.com": "Associated Press - International news agency",
+        "cnn.com": "CNN - American news channel",
+        "theguardian.com": "The Guardian - British newspaper",
+        "nytimes.com": "The New York Times - American newspaper",
+        "washingtonpost.com": "The Washington Post - American newspaper",
+        "aljazeera.com": "Al Jazeera - International news",
+    }
+    
+    # Use LLM to dynamically select relevant sources based on the query
+    source_list = "\n".join([f"- {domain}: {description}" for domain, description in available_sources.items()])
+    
+    prompt = f"""Based on the user's query, select the most relevant news sources to search. 
+Consider the topic, geographic focus, and type of information needed.
+
+User Query: {user_message}
+
+Available Sources:
+{source_list}
+
+Select 3-8 most relevant sources. Return ONLY a JSON array of domain names (without "site:" prefix).
+Example: ["timesofindia.indiatimes.com", "ndtv.com", "reuters.com"]
+
+JSON array of selected sources:"""
+    
+    try:
+        # Use Together AI to select sources
+        response = together_client.chat.completions.create(
+            model="meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that selects relevant news sources. Always return a valid JSON array."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=200
+        )
+        
+        # Parse the response
+        import json
+        import re
+        response_text = response.choices[0].message.content.strip()
+        
+        # Extract JSON array from response (handle markdown code blocks)
+        json_match = re.search(r'\[.*?\]', response_text, re.DOTALL)
+        if json_match:
+            selected_domains = json.loads(json_match.group(0))
+        else:
+            # Fallback: try to parse the whole response
+            selected_domains = json.loads(response_text)
+        
+        # Validate that selected domains are in available sources
+        selected_sources = [domain for domain in selected_domains if domain in available_sources]
+        
+        # If no valid sources selected, use default Indian sources
+        if not selected_sources:
+            logger.warning("No valid sources selected by LLM, using default Indian sources")
+            selected_sources = [
+                "timesofindia.indiatimes.com",
+                "ndtv.com",
+                "thehindu.com",
+                "indianexpress.com",
+                "hindustantimes.com"
+            ]
+        
+        logger.info(f"Selected {len(selected_sources)} sources: {selected_sources}")
+        
+    except Exception as e:
+        logger.error(f"Error in planner node selecting sources: {e}", exc_info=True)
+        # Fallback to default Indian sources
+        selected_sources = [
+            "timesofindia.indiatimes.com",
+            "ndtv.com",
+            "thehindu.com",
+            "indianexpress.com",
+            "hindustantimes.com"
+        ]
+    
+    # Generate queries for selected sources
+    queries = [f"site:{site} {user_message}" for site in selected_sources]
+    
     state["queries"] = queries
+    state["selected_sources"] = selected_sources
     return state
 
 
 def tavily_search_node(state: State) -> State:
-    """Fetch results from Tavily using queries and format them for the API response."""
+    """Fetch results from Tavily using queries and filter by selected sources."""
     import datetime
     import hashlib
+    from urllib.parse import urlparse
+    
     queries = state.get("queries", [])
+    selected_sources = state.get("selected_sources", [])
     formatted_results = []
+    
+    # Normalize selected sources for comparison (remove www, http/https, etc.)
+    normalized_sources = set()
+    for source in selected_sources:
+        # Remove protocol and www
+        normalized = source.replace("https://", "").replace("http://", "").replace("www.", "")
+        normalized_sources.add(normalized)
+    
     for idx, q in enumerate(queries):
         try:
-            response = tavily_client.search(query=q, num_results=3)
+            response = tavily_client.search(query=q, num_results=5)  # Fetch more to filter
             for i, res in enumerate(response.get("results", [])):
-                # Generate unique ID based on URL (if available) or fallback to deterministic ID
                 article_url = res.get("url")
+                
+                # Filter: only include articles from selected sources
+                if article_url:
+                    try:
+                        parsed_url = urlparse(article_url)
+                        article_domain = parsed_url.netloc.replace("www.", "")
+                        
+                        # Check if article domain matches any selected source
+                        is_from_selected_source = any(
+                            source in article_domain or article_domain in source
+                            for source in normalized_sources
+                        )
+                        
+                        if not is_from_selected_source:
+                            logger.debug(f"Skipping article from {article_domain} (not in selected sources)")
+                            continue
+                    except Exception as e:
+                        logger.warning(f"Error parsing URL {article_url}: {e}")
+                        # If we can't parse, include it (better to have it than miss it)
+                
+                # Generate unique ID based on URL (if available) or fallback to deterministic ID
                 if article_url:
                     # Use URL hash for unique, deterministic ID
                     url_hash = hashlib.md5(article_url.encode()).hexdigest()[:8]
@@ -270,15 +399,26 @@ def tavily_search_node(state: State) -> State:
                     # Fallback to query-based ID if no URL
                     datapoint_id = f"tavily_{idx}_{i}_{int(datetime.datetime.utcnow().timestamp())}"
                 
+                # Extract source name from URL domain
+                source_name = "Tavily Search"
+                if article_url:
+                    try:
+                        parsed_url = urlparse(article_url)
+                        domain = parsed_url.netloc.replace("www.", "")
+                        # Use domain as source name (e.g., "ndtv.com" -> "NDTV")
+                        source_name = domain.split(".")[0].title() if "." in domain else domain
+                    except:
+                        pass
+                
                 formatted_results.append({
                     "id": datapoint_id,
                     "source_type": "tavily",
-                    "source_name": "Tavily Search",
-                    "source_url": "https://api.tavily.com",
+                    "source_name": source_name,
+                    "source_url": article_url if article_url else "https://api.tavily.com",
                     "title": res.get("title"),
                     "content": res.get("content"),
                     "url": article_url,
-                    "published_at": res.get("published_at",datetime.datetime.utcnow().isoformat() + "Z"),
+                    "published_at": res.get("published_at", datetime.datetime.utcnow().isoformat() + "Z"),
                     "author": res.get("author"),
                     "categories": res.get("categories", []),
                     "search_query": q,
@@ -286,6 +426,7 @@ def tavily_search_node(state: State) -> State:
                     "ingested_at": datetime.datetime.utcnow().isoformat() + "Z"
                 })
         except Exception as e:
+            logger.error(f"Error in Tavily search for query '{q}': {e}", exc_info=True)
             # For errors, use timestamp-based ID to ensure uniqueness
             error_id = f"tavily_{idx}_error_{int(datetime.datetime.utcnow().timestamp() * 1000000)}"
             formatted_results.append({
@@ -303,6 +444,8 @@ def tavily_search_node(state: State) -> State:
                 "relevance_score": None,
                 "ingested_at": datetime.datetime.utcnow().isoformat() + "Z"
             })
+    
+    logger.info(f"Tavily search complete: {len(formatted_results)} results from {len(selected_sources)} selected sources")
     state["results"] = formatted_results
     return state
 
@@ -587,6 +730,7 @@ def classification_node(state: State) -> State:
     
     state["classifications"] = classifications
     return state
+
 
 
 # Create the graph
